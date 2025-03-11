@@ -2,10 +2,20 @@
 FROM python:latest
 
 # add our python program
-ADD rmq-producer.py ./
+ADD run_worker.py ./
+ADD infofile.py ./
 
 # install dependent libraries
+# RUN pip install time
+# RUN pip install infofile
 RUN pip install pika
+RUN pip install uproot
+RUN pip install awkward
+RUN pip install vector
+RUN pip install matplotlib
+RUN pip install requests
+RUN pip install aiohttp
+
 
 # the command to run our program
 CMD [ "python", "-u", "./run_worker.py"]

@@ -1,8 +1,8 @@
 import uproot
 import numpy as np # for numerical calculations such as histogramming
 import matplotlib.pyplot as plt # for plotting
-import matplotlib_inline # to edit the inline plot format
-matplotlib_inline.backend_inline.set_matplotlib_formats('pdf', 'svg') # to make plots in pdf (vector) format
+# import matplotlib_inline # to edit the inline plot format
+# matplotlib_inline.backend_inline.set_matplotlib_formats('pdf', 'svg') # to make plots in pdf (vector) format
 from matplotlib.ticker import AutoMinorLocator # for minor ticks
 import uproot # for reading .root files
 import awkward as ak # to represent nested data in columnar format
@@ -250,12 +250,11 @@ mc_labels = [] # define list to hold the legend labels of the Monte Carlo bars
 
 print("adding samples")
 
-for sample in samples: # loop over samples
-    if sample not in ['data', r'Signal ($m_H$ = 125 GeV)']: # if not data nor signal
-        mc_x.append( ak.to_numpy(all_data[sample]['mass']) ) # append to the list of Monte Carlo histogram entries
-        mc_weights.append( ak.to_numpy(all_data[sample].totalWeight) ) # append to the list of Monte Carlo weights
-        mc_colors.append( samples[sample]['color'] ) # append to the list of Monte Carlo bar colors
-        mc_labels.append( sample ) # append to the list of Monte Carlo legend labels
+for sample in [r'Background $Z,t\bar{t}$', r'Background $ZZ^*$']: # loop over samples
+    mc_x.append( ak.to_numpy(all_data[sample]['mass']) ) # append to the list of Monte Carlo histogram entries
+    mc_weights.append( ak.to_numpy(all_data[sample].totalWeight) ) # append to the list of Monte Carlo weights
+    mc_colors.append( samples[sample]['color'] ) # append to the list of Monte Carlo bar colors
+    mc_labels.append( sample ) # append to the list of Monte Carlo legend labels
 
 print("done adding samples")
 print("start plotting")
