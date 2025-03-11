@@ -1,0 +1,31 @@
+networks:
+  rabbit:
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    networks:
+      - rabbit
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 10s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+  consumer:
+    image: worker_image
+    networks:
+      - rabbit
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+  producer:
+    image: master_image
+    
+    networks:
+      - rabbit
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
