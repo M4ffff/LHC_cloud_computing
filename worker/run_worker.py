@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import pika
-
+ 
 # when RabbitMQ is running on localhost
 # params = pika.ConnectionParameters('localhost')
 
@@ -18,15 +18,9 @@ channel = connection.channel()
 
 # create the queue, if it doesn't already exist
 channel.queue_declare(queue='messages')
-
-# create the queue, if it doesn't already exist
 channel.queue_declare(queue='sending_all')
 
 
-# WORKERS WILL DO SOME WORK HERE
-# define a function to call when message is received
-def callback(ch, method, properties, body):
-    print(f" [x] Received {body}")
 
 
 
@@ -39,7 +33,7 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt 
 from matplotlib.ticker import AutoMinorLocator 
-import gzip
+import pickle as pkl
 
 MeV = 0.001
 GeV = 1.0
@@ -120,11 +114,11 @@ def calc_weight(relevant_weights, sample, events):
 #%%
 
 def worker_work(ch, method, properties, inputs):
-        inputs_dict = json.loads(inputs.decode('utf-8'))
+        # inputs_dict = json.loads(inputs.decode('utf-8'))
+        inputs_dict = pkl.loads(inputs)
         
-        
+        samples_sample = inputs_dict["samples_sample"]
         sample = inputs_dict["sample"]
-        sample_data = inputs_dict["sample_data"]
         path = inputs_dict["path"]
         variables = inputs_dict["variables"]
         relevant_weights = inputs_dict["relevant_weights"]
@@ -138,7 +132,7 @@ def worker_work(ch, method, properties, inputs):
         frames = [] 
 
         # Loop over each file
-        for value in sample_data['list']: 
+        for value in samples_sample['list']: 
             if sample == 'data': 
                 prefix = "Data/" 
             else: 
@@ -146,7 +140,7 @@ def worker_work(ch, method, properties, inputs):
             fileString = f"{path}{prefix}{value}.4lep.root" 
 
 
-            print(f"\t{value}:") 
+            # print(f"\t{value}:") 
             start = time.time() 
 
             # Open file
@@ -183,27 +177,27 @@ def worker_work(ch, method, properties, inputs):
                 else:
                     nOut = len(data)
                 elapsed = time.time() - start # time taken to process
-                print("\t\t nIn: "+str(nIn)+",\t nOut: \t"+str(nOut)+"\t in "+str(round(elapsed,1))+"s") # events before and after
+                # print("\t\t nIn: "+str(nIn)+",\t nOut: \t"+str(nOut)+"\t in "+str(round(elapsed,1))+"s") # events before and after
 
                 # Append data to the whole sample data list
                 sample_data.append(data)
 
             frames.append(ak.concatenate(sample_data)) 
 
-
-        frames_sample_dict = {"frames":frames, "sample":sample}
-        frames_json = json.dumps(frames_sample_dict).encode('utf-8')
-        # print(f"into json: {frames}")
-        # all_data_compressed = gzip.compress(all_data_json)
-        # print(f"all data compressed: {all_data_compressed}")
+        outputs_dict = {"sample":sample, "frames":frames}
+        outputs = pkl.dumps(outputs_dict)
         
-        print("frames jsoned")
-        
+        print(f"WORKER publishing {sample}")
+            # MASTER WILL NEED TO SEND MESSAGES TO WORKERS
+        # send a simple message
         channel.basic_publish(exchange='',
-                        routing_key='sending_all',
-                        body=frames_json)
+                            routing_key='sending_all',
+                            body=outputs)
+        print(f"WORKER published {sample}")
+ 
+    
 
-        print("frames_json sent")
+
 
 
 # setup to listen for messages on queue 'messages'
@@ -212,8 +206,6 @@ channel.basic_consume(queue='messages',
                       on_message_callback=worker_work)
 
 
-# create the queue, if it doesn't already exist
-# channel.queue_declare(queue='sending_all')
 
 # log message to show we've started
 print('Waiting for messages. To exit press CTRL+C')

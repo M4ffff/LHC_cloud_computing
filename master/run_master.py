@@ -2,7 +2,7 @@
 import pika
 
 print("connection starting")
-
+ 
 # when RabbitMQ is running on localhost
 # params = pika.ConnectionParameters('localhost')
 
@@ -22,10 +22,16 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import AutoMinorLocator 
 import awkward as ak 
 import json
-import gzip
+import pickle as pkl
+import os 
+
+MeV = 0.001
+GeV = 1.0
+
+lumi=10
 
 
-def plot_final_fig(samples, all_data, GeV):
+def final_anal(all_data, samples):
     # x-axis range of the plot
     xmin = 80 * GeV
     xmax = 250 * GeV
@@ -150,10 +156,10 @@ def plot_final_fig(samples, all_data, GeV):
                 fontsize=8 ) 
 
     # Add energy and luminosity
-    luminosity_used = str(luminosity*run_time_speed) # luminosity to write on the plot
+    lumi_used = str(lumi*run_time_speed) # luminosity to write on the plot
     plt.text(0.05, # x
                 0.82, # y
-                r'$\sqrt{s}$=13 TeV,$\int$L dt = '+luminosity_used+ r' fb$^{-1}$', # text
+                r'$\sqrt{s}$=13 TeV,$\int$L dt = '+lumi_used+ r' fb$^{-1}$', # text
                 transform=ax.transAxes ) # coordinate system used is that of main_axes
 
     # Add a label for the analysis carried out
@@ -165,16 +171,17 @@ def plot_final_fig(samples, all_data, GeV):
     # draw the legend
     ax.legend( frameon=False ) # no box around the legend
 
-    plt.savefig("output.png")
+    plt.show()
+
 
     # Signal stacked height
     signal_tot = signal_heights[0] + mc_x_tot
 
     # Peak of signal
-    print(signal_tot[8])
+    print("peak: ", signal_tot[8])
 
     # Neighbouring bins
-    print(signal_tot[7:10])
+    print("Neighbouring bins: ", signal_tot[7:10])
 
     # Signal and background events
     N_sig = signal_tot[7:10].sum()
@@ -184,7 +191,8 @@ def plot_final_fig(samples, all_data, GeV):
     signal_significance = N_sig/np.sqrt(N_bg + 0.3 * N_bg**2) 
     print(f"\nResults:\n{N_sig = :.3f}\n{N_bg = :.3f}\n{signal_significance = :.3f}")
     
-    print("waiting to run again...")
+
+
 
 
 
@@ -198,6 +206,7 @@ channel = connection.channel()
 
 # create the queue, if it doesn't already exist
 channel.queue_declare(queue='messages')
+channel.queue_declare(queue='sending_all')
 
 # create the queue, if it doesn't already exist
 channel.queue_declare(queue='sending_all')
@@ -260,21 +269,6 @@ luminosity = 10
 # change lower to run quicker
 run_time_speed = 0.5
 
-# Dictionary to hold awkward arrays
-all_data = {} 
-
-for sample in samples: 
-    sample_data = samples[sample]
-    inputs_dict = {"sample":sample, "sample_data":sample_data, "path":path, "variables":variables, "relevant_weights":relevant_weights, "run_time_speed":run_time_speed}
-    inputs = json.dumps(inputs_dict) #.encode('utf-8')
-
-    # MASTER WILL NEED TO SEND MESSAGES TO WORKERS
-    # send a simple message
-    channel.basic_publish(exchange='',
-                        routing_key='messages',
-                        body=inputs)
-
-    print("master published")
 
 
 def use_all_data(ch, method, properties, frames_json):
@@ -290,20 +284,63 @@ def use_all_data(ch, method, properties, frames_json):
     all_data[sample] = ak.concatenate(frames)
     
 
+def receive_data(ch, method, properties, outputs):
+    
+    # outputs_dict = pkl.loads(outputs.decode('utf-8'))
+    outputs_dict = pkl.loads(outputs)
+    
+    sample = outputs_dict["sample"]
+    frames = outputs_dict["frames"]
+    
+    print(f"received {sample} data")
+    
+    # GATHER DATA FROM WORKERS BEFORE MERGING?
+    all_data[sample] = ak.concatenate(frames) # dictionary entry is concatenated awkward arrays
+    
+    if len(all_data) >= len(samples):
+        print("master done consuming.")
+        ch.stop_consuming()
+    
+# Dictionary to hold awkward arrays
+all_data = {} 
 
-all_data = {}
+for sample in samples: 
+    # print(f"MASTER publishing {sample}")
+    inputs_dict = {"samples_sample":samples[sample], "sample":sample, "path":path, "variables":variables, "relevant_weights":relevant_weights, "run_time_speed":run_time_speed}
+    inputs = pkl.dumps(inputs_dict) 
 
-# setup to listen for messages on queue 'sending_all'
+    # MASTER WILL NEED TO SEND MESSAGES TO WORKERS
+    # send a simple message
+    channel.basic_publish(exchange='',
+                        routing_key='messages',
+                        body=inputs)
+
+
+    print(f"MASTER published {sample}")
+    
+# for sample in samples:
+# while len(all_data)
+# setup to listen for messages on queue 'messages'
 channel.basic_consume(queue='sending_all',
-                      auto_ack=True,
-                      on_message_callback=use_all_data)
+                    auto_ack=True,
+                    on_message_callback=receive_data)
+
+
+print("MASTER consuming")
 
 # start listening
 channel.start_consuming()
 
-print("master consumed")
+print("MASTER consumed")
 
+print(len(all_data))
 
+if len(all_data)==4:
+    print("final analysis")
+    final_anal(all_data, samples)
+    
+# print("closing channel")
 
-
-plot_final_fig(samples, all_data, GeV)
+# channel.close()
+# 
+print("finished?")
