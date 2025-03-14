@@ -9,7 +9,7 @@ import awkward as ak # to represent nested data in columnar format
 import vector # for 4-momentum calculations
 import time
 import uproot
-import infofile 
+import worker.infofile as infofile
 
 
 
@@ -212,7 +212,8 @@ for sample in samples:
     all_data[sample] = ak.concatenate(frames) # dictionary entry is concatenated awkward arrays
 
 
-
+print(len(all_data))
+print((all_data).shape)
 
 # PLOTTING
 
