@@ -20,10 +20,7 @@ channel = connection.channel()
 channel.queue_declare(queue='messages')
 channel.queue_declare(queue='sending_all')
 
-# WORKERS WILL DO SOME WORK HERE
-# define a function to call when message is received
-def callback(ch, method, properties, body):
-    print(f" [x] Received {body}")
+
 
 
 
@@ -143,7 +140,7 @@ def worker_work(ch, method, properties, inputs):
             fileString = f"{path}{prefix}{value}.4lep.root" 
 
 
-            print(f"\t{value}:") 
+            # print(f"\t{value}:") 
             start = time.time() 
 
             # Open file
@@ -180,7 +177,7 @@ def worker_work(ch, method, properties, inputs):
                 else:
                     nOut = len(data)
                 elapsed = time.time() - start # time taken to process
-                print("\t\t nIn: "+str(nIn)+",\t nOut: \t"+str(nOut)+"\t in "+str(round(elapsed,1))+"s") # events before and after
+                # print("\t\t nIn: "+str(nIn)+",\t nOut: \t"+str(nOut)+"\t in "+str(round(elapsed,1))+"s") # events before and after
 
                 # Append data to the whole sample data list
                 sample_data.append(data)
@@ -190,13 +187,13 @@ def worker_work(ch, method, properties, inputs):
         outputs_dict = {"sample":sample, "frames":frames}
         outputs = pkl.dumps(outputs_dict)
         
-        print("WORKER publishing")
+        print(f"WORKER publishing {sample}")
             # MASTER WILL NEED TO SEND MESSAGES TO WORKERS
         # send a simple message
         channel.basic_publish(exchange='',
                             routing_key='sending_all',
                             body=outputs)
-        print("WORKER published")
+        print(f"WORKER published {sample}")
  
     
 

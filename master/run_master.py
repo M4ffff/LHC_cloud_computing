@@ -2,7 +2,7 @@
 import pika
 
 print("connection starting")
-
+ 
 # when RabbitMQ is running on localhost
 # params = pika.ConnectionParameters('localhost')
 
@@ -23,6 +23,7 @@ from matplotlib.ticker import AutoMinorLocator
 import awkward as ak 
 import json
 import pickle as pkl
+import os 
 
 MeV = 0.001
 GeV = 1.0
@@ -177,10 +178,10 @@ def final_anal(all_data, samples):
     signal_tot = signal_heights[0] + mc_x_tot
 
     # Peak of signal
-    print(signal_tot[8])
+    print("peak: ", signal_tot[8])
 
     # Neighbouring bins
-    print(signal_tot[7:10])
+    print("Neighbouring bins: ", signal_tot[7:10])
 
     # Signal and background events
     N_sig = signal_tot[7:10].sum()
@@ -270,12 +271,14 @@ run_time_speed = 1
 
 
 def receive_data(ch, method, properties, outputs):
-    print("received data")
+    
     # outputs_dict = pkl.loads(outputs.decode('utf-8'))
     outputs_dict = pkl.loads(outputs)
     
     sample = outputs_dict["sample"]
     frames = outputs_dict["frames"]
+    
+    print(f"received {sample} data")
     
     # GATHER DATA FROM WORKERS BEFORE MERGING?
     all_data[sample] = ak.concatenate(frames) # dictionary entry is concatenated awkward arrays
@@ -288,7 +291,7 @@ def receive_data(ch, method, properties, outputs):
 all_data = {} 
 
 for sample in samples: 
-    print("MASTER publishing")
+    # print(f"MASTER publishing {sample}")
     inputs_dict = {"samples_sample":samples[sample], "sample":sample, "path":path, "variables":variables, "relevant_weights":relevant_weights, "run_time_speed":run_time_speed}
     inputs = pkl.dumps(inputs_dict) 
 
@@ -299,7 +302,7 @@ for sample in samples:
                         body=inputs)
 
 
-    print("MASTER published")
+    print(f"MASTER published {sample}")
     
 # for sample in samples:
 # while len(all_data)
@@ -322,9 +325,8 @@ if len(all_data)==4:
     print("final analysis")
     final_anal(all_data, samples)
     
-print("closing channel")
+# print("closing channel")
 
 # channel.close()
 # 
-# print("finished?")
-
+print("finished?")
