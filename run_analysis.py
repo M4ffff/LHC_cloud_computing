@@ -9,7 +9,7 @@ import awkward as ak # to represent nested data in columnar format
 import vector # for 4-momentum calculations
 import time
 import uproot
-import infofile 
+import worker.infofile as infofile
 
 
 
@@ -118,6 +118,7 @@ samples = {
 }
 
 #%%
+
 
 
 # Important variables used in analysis
