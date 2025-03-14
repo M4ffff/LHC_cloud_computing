@@ -15,7 +15,7 @@ services:
       retries: 5
       start_period: 30s
   consumer:
-    build: ./worker
+    # build: ./worker
     image: worker_image
     scale: 3
     networks:
@@ -24,7 +24,7 @@ services:
       rabbitmq:
         condition: service_healthy
   producer:
-    build: ./master
+    # build: ./master
     image: master_image
     networks:
       - rabbit
