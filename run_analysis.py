@@ -202,8 +202,6 @@ for sample in samples:
                 nOut = len(data)
             elapsed = time.time() - start # time taken to process
             print("\t\t nIn: "+str(nIn)+",\t nOut: \t"+str(nOut)+"\t in "+str(round(elapsed,1))+"s") # events before and after
-            calls_per_sec = nIn / elapsed
-            print(f"\t\t calls per second: {calls_per_sec:2f}")
 
             # Append data to the whole sample data list
             sample_data.append(data)
@@ -216,7 +214,7 @@ for sample in samples:
 
 
 print(len(all_data))
-# print((all_data).shape)
+print((all_data).shape)
 
 # PLOTTING
 

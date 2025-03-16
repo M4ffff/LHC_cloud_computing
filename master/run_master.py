@@ -7,13 +7,13 @@ print("connection starting")
 # params = pika.ConnectionParameters('localhost')
 
 # when RabbitMQ broker is running on network
-params = pika.ConnectionParameters('rabbitmq')
+# params = pika.ConnectionParameters('rabbitmq')
 
 
 # when starting services with docker compose
-# params = pika.ConnectionParameters(
-#     'rabbitmq',
-#     heartbeat=0)
+params = pika.ConnectionParameters(
+    'rabbitmq',
+    heartbeat=0)
 
 print("connection started")
 
@@ -207,7 +207,9 @@ channel = connection.channel()
 # create the queue, if it doesn't already exist
 channel.queue_declare(queue='messages')
 channel.queue_declare(queue='sending_all')
-channel.queue_declare(queue='counter')
+
+# create the queue, if it doesn't already exist
+channel.queue_declare(queue='sending_all')
 
 
 
@@ -244,9 +246,6 @@ samples = {
 }
 
 
-
-
-
 #%%
 
 # Important variables used in analysis
@@ -269,29 +268,6 @@ luminosity = 10
 # Controls the fraction of all events analysed
 # change lower to run quicker
 run_time_speed = 0.5
-
-# samples = counter_inputs_dict["samples"]
-# path = counter_inputs_dict["path"]
-# run_time_speed = counter_inputs_dict["run_time_speed"]
-    
-counter_inputs_dict = {"samples":samples,"path":path,"run_time_speed":run_time_speed}
-counter_inputs = pkl.dumps(counter_inputs_dict)
-
-channel.basic_publish(exchange='',
-                    routing_key='counter',
-                    body=counter_inputs)
-
-def receive_entries(ch, method, properties, entry_outputs):
-    # entries_dict = {"num_entries":num_entries, "total_num_entries":total_num_entries}
-    entries_dict = pkl.loads(entry_outputs)
-    num_entries = entries_dict["num_entries"]
-    total_num_entries = entries_dict["total_num_entries"]
-    
-    print("total number of entries: ", total_num_entries)
-
-channel.basic_consume(queue='counter',
-                    auto_ack=True,
-                    on_message_callback=receive_entries)
 
 
 
