@@ -278,39 +278,32 @@ luminosity = 10
 
 # Controls the fraction of all events analysed
 # change lower to run quicker
-run_time_speed = 0.5
+run_time_speed = 1
 
     
 # Dictionary to hold awkward arrays
 all_data = {} 
-
+counter = 0
     
 
 def receive_data(ch, method, properties, outputs):
+    global counter
     print("MASTER receiving some kind of data")
     outputs_dict = pkl.loads(outputs)
     # print(outputs_dict.keys())
     
     sample = outputs_dict["sample"]
-    # THIS IS AN AWKWARD ARRAY
+    # THIS IS A LIST OF LIST OF AWKWARD ARRAYs
     data = outputs_dict["data"]
+    entry_stop = outputs_dict["entry_stop"]
     
-    # print(data)
     
     print(f"received {sample} data")
     
-    # GATHER DATA FROM WORKERS BEFORE MERGING?
     if sample in all_data.keys():
         print("all_data[sample] exists:")
-        # print(all_data[sample])
-        # print(data)
         current_sample = all_data[sample]
-        print(data[0])
-        print(len(data[0]))
-        print(current_sample)
-        print(len(current_sample))
         updated_version = ak.concatenate( [current_sample, data[0]] )
-        print(len(updated_version))
         all_data[sample] = ( updated_version )
         
     else:
@@ -319,11 +312,15 @@ def receive_data(ch, method, properties, outputs):
         print("length of all_data: ", len(all_data))
         
     #### hmmm
-    print("consuming cancelled?")
+    # print("consuming cancelled?")
     print("length of all_data: ", len(all_data))
-    if len(all_data) >= 4:
-        ch.stop_consuming()
-        print("STOPPED CONSUMING")    
+    
+    if entry_stop == all_num_entries[sample]:
+        print("COUNTER INCREASING")
+        counter += 1
+        if counter >= 4:
+            ch.stop_consuming()
+            print("STOPPED CONSUMING")    
     
     
 
@@ -343,7 +340,7 @@ print("MASTER consuming")
 # channel.start_consuming()
     
 
-
+all_num_entries = {}
 
 for sample in samples: 
     # Print which sample is being processed
@@ -368,6 +365,8 @@ for sample in samples:
         tree = uproot.open(f"{fileString}:mini")
         
         num_entries = tree.num_entries*run_time_speed
+        all_num_entries[sample] = num_entries
+        
         
         sample_data = []
 
