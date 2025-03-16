@@ -17,8 +17,8 @@ connection = pika.BlockingConnection(params)
 channel = connection.channel()
 
 # create the queue, if it doesn't already exist
-channel.queue_declare(queue='messages')
-channel.queue_declare(queue='sending_all')
+channel.queue_declare(queue='master_to_worker')
+channel.queue_declare(queue='worker_to_master')
 
 
 
@@ -41,6 +41,16 @@ GeV = 1.0
 lumi=10
 
 
+def publish(dict, sample, routing_key, container):
+    
+    outputs = pkl.dumps(dict)
+    
+    print(f"{container} publishing {sample}")
+
+    channel.basic_publish(exchange='',
+                        routing_key=routing_key,
+                        body=outputs)
+    print(f"{container} published {sample}")
 
 #%% FUNCTIONS
 
@@ -111,97 +121,77 @@ def calc_weight(relevant_weights, sample, events):
     return total_weight
 
 
+
+
+
+
 #%%
 
 def worker_work(ch, method, properties, inputs):
-        # inputs_dict = json.loads(inputs.decode('utf-8'))
-        inputs_dict = pkl.loads(inputs)
-        
-        samples_sample = inputs_dict["samples_sample"]
-        sample = inputs_dict["sample"]
-        path = inputs_dict["path"]
-        variables = inputs_dict["variables"]
-        relevant_weights = inputs_dict["relevant_weights"]
-        run_time_speed = inputs_dict["run_time_speed"]
+    # inputs_dict = json.loads(inputs.decode('utf-8'))
+    inputs_dict = pkl.loads(inputs)
+    
+    tree = inputs_dict["tree"]
+    variables = inputs_dict["variables"]
+    relevant_weights = inputs_dict["relevant_weights"]
+    entry_start = inputs_dict["entry_start"]
+    entry_stop = inputs_dict["entry_stop"]
+    sample = inputs_dict["sample"]
+    value = inputs_dict["value"]
 
 
-        # Print which sample is being processed
-        print(f'WORKER received {sample}') 
-
-        # Define empty list to hold data
-        frames = [] 
-
-        # Loop over each file
-        for value in samples_sample['list']: 
-            if sample == 'data': 
-                prefix = "Data/" 
-            else: 
-                prefix = f"MC/mc_{str(infofile.infos[value]['DSID'])}."
-            fileString = f"{path}{prefix}{value}.4lep.root" 
-
-
-            # print(f"\t{value}:") 
-            start = time.time() 
-
-            # Open file
-            tree = uproot.open(f"{fileString}:mini")
-            
-            sample_data = []
-
-            # Loop over data in the tree
-            for data in tree.iterate(variables + relevant_weights, library="ak", 
-                                    entry_stop=tree.num_entries*run_time_speed, step_size = 1000000):
-                
-                # Number of events in this batch
-                nIn = len(data) 
-                                    
-                # Record transverse momenta (see bonus activity for explanation)
-                data['leading_lep_pt'] = data['lep_pt'][:,0]
-                data['sub_leading_lep_pt'] = data['lep_pt'][:,1]
-                data['third_leading_lep_pt'] = data['lep_pt'][:,2]
-                data['last_lep_pt'] = data['lep_pt'][:,3]
-
-                # Cuts
-                lepton_type = data['lep_type']
-                data = data[~check_lepton_type(lepton_type)]
-                lepton_charge = data['lep_charge']
-                data = data[~check_lepton_charge(lepton_charge)]
-                
-                # calculate invariant mass
-                data['mass'] = calc_mass(data['lep_pt'], data['lep_eta'], data['lep_phi'], data['lep_E'])
-
-                # Store Monte Carlo weights in the data
-                if 'data' not in value: # Only calculates weights if the data is MC
-                    data['totalWeight'] = calc_weight(relevant_weights, value, data)
-                    nOut = sum(data['totalWeight']) # sum of weights passing cuts in this batch 
-                else:
-                    nOut = len(data)
-                elapsed = time.time() - start # time taken to process
-                # print("\t\t nIn: "+str(nIn)+",\t nOut: \t"+str(nOut)+"\t in "+str(round(elapsed,1))+"s") # events before and after
-
-                # Append data to the whole sample data list
-                sample_data.append(data)
-
-            frames.append(ak.concatenate(sample_data)) 
-
-        outputs_dict = {"sample":sample, "frames":frames}
-        outputs = pkl.dumps(outputs_dict)
-        
-        print(f"WORKER publishing {sample}")
-            # MASTER WILL NEED TO SEND MESSAGES TO WORKERS
-        # send a simple message
-        channel.basic_publish(exchange='',
-                            routing_key='sending_all',
-                            body=outputs)
-        print(f"WORKER published {sample}")
+    # Print which sample is being processed
+    print(f'WORKER received {sample}, chunk {entry_start} to {entry_stop}') 
  
+
+    local_sample_data = []
+
+    # Loop over data in the tree
+    for data in tree.iterate(variables + relevant_weights, library="ak", entry_start=entry_start,
+                            entry_stop=entry_stop, step_size = 1000000):
+        
+        # Number of events in this batch
+        nIn = len(data) 
+                            
+        # Record transverse momenta (see bonus activity for explanation)
+        data['leading_lep_pt'] = data['lep_pt'][:,0]
+        data['sub_leading_lep_pt'] = data['lep_pt'][:,1]
+        data['third_leading_lep_pt'] = data['lep_pt'][:,2]
+        data['last_lep_pt'] = data['lep_pt'][:,3]
+
+        # Cuts
+        lepton_type = data['lep_type']
+        data = data[~check_lepton_type(lepton_type)]
+        lepton_charge = data['lep_charge']
+        data = data[~check_lepton_charge(lepton_charge)]
+        
+        # calculate invariant mass
+        data['mass'] = calc_mass(data['lep_pt'], data['lep_eta'], data['lep_phi'], data['lep_E'])
+
+        # Store Monte Carlo weights in the data
+        if 'data' not in value: # Only calculates weights if the data is MC
+            data['totalWeight'] = calc_weight(relevant_weights, value, data)
+            nOut = sum(data['totalWeight']) # sum of weights passing cuts in this batch 
+        else:
+            nOut = len(data)
+        # elapsed = time.time() - start # time taken to process
+        # print("\t\t nIn: "+str(nIn)+",\t nOut: \t"+str(nOut)+"\t in "+str(round(elapsed,1))+"s") # events before and after
+
+        local_sample_data.append(data)
+
+
+    outputs_dict = {"sample":sample, "data":local_sample_data}
+    # outputs = pkl.dumps(outputs_dict)
+    
+    publish(outputs_dict, sample, "worker_to_master", "WORKER")
+
     
 
 
 
 
-# setup to listen for messages on queue 'messages'
-channel.basic_consume(queue='messages',
+# setup to listen for messages on queue 'master_to_worker'
+channel.basic_consume(queue='master_to_worker',
                       auto_ack=True,
                       on_message_callback=worker_work)
 

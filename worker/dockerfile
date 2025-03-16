@@ -13,7 +13,7 @@ RUN pip install vector
 RUN pip install matplotlib
 RUN pip install requests
 RUN pip install aiohttp
-
+ 
 # add our python program
 ADD run_worker.py ./
 ADD infofile.py ./

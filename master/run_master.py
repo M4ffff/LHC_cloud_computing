@@ -24,6 +24,10 @@ import awkward as ak
 import json
 import pickle as pkl
 import os 
+import infofile
+import time
+import uproot
+
 
 MeV = 0.001
 GeV = 1.0
@@ -192,7 +196,16 @@ def final_anal(all_data, samples):
     print(f"\nResults:\n{N_sig = :.3f}\n{N_bg = :.3f}\n{signal_significance = :.3f}")
     
 
+def publish(dict, sample, routing_key, container):
+    
+    outputs = pkl.dumps(dict)
+    
+    print(f"{container} publishing {sample}")
 
+    channel.basic_publish(exchange='',
+                        routing_key=routing_key,
+                        body=outputs)
+    print(f"{container} published {sample}")
 
 
 
@@ -205,11 +218,9 @@ connection = pika.BlockingConnection(params)
 channel = connection.channel()
 
 # create the queue, if it doesn't already exist
-channel.queue_declare(queue='messages')
-channel.queue_declare(queue='sending_all')
+channel.queue_declare(queue='master_to_worker')
+channel.queue_declare(queue='worker_to_master')
 
-# create the queue, if it doesn't already exist
-channel.queue_declare(queue='sending_all')
 
 
 
@@ -269,78 +280,153 @@ luminosity = 10
 # change lower to run quicker
 run_time_speed = 0.5
 
-
-
-def use_all_data(ch, method, properties, frames_json):
-    
-    # print(f"all data compressed master: {all_data_compressed}")
-    
-    # all_data_json = gzip.decompress(all_data_compressed)
-    frames_dict = json.loads(frames_json.decode('utf-8')) 
-    
-    sample = frames_dict["sample"]
-    frames = frames_dict["frames"]
-
-    all_data[sample] = ak.concatenate(frames)
-    
-
-def receive_data(ch, method, properties, outputs):
-    
-    # outputs_dict = pkl.loads(outputs.decode('utf-8'))
-    outputs_dict = pkl.loads(outputs)
-    
-    sample = outputs_dict["sample"]
-    frames = outputs_dict["frames"]
-    
-    print(f"received {sample} data")
-    
-    # GATHER DATA FROM WORKERS BEFORE MERGING?
-    all_data[sample] = ak.concatenate(frames) # dictionary entry is concatenated awkward arrays
-    
-    if len(all_data) >= len(samples):
-        print("master done consuming.")
-        ch.stop_consuming()
     
 # Dictionary to hold awkward arrays
 all_data = {} 
 
-for sample in samples: 
-    # print(f"MASTER publishing {sample}")
-    inputs_dict = {"samples_sample":samples[sample], "sample":sample, "path":path, "variables":variables, "relevant_weights":relevant_weights, "run_time_speed":run_time_speed}
-    inputs = pkl.dumps(inputs_dict) 
+    
 
-    # MASTER WILL NEED TO SEND MESSAGES TO WORKERS
-    # send a simple message
-    channel.basic_publish(exchange='',
-                        routing_key='messages',
-                        body=inputs)
+def receive_data(ch, method, properties, outputs):
+    print("MASTER receiving some kind of data")
+    outputs_dict = pkl.loads(outputs)
+    # print(outputs_dict.keys())
+    
+    sample = outputs_dict["sample"]
+    # THIS IS AN AWKWARD ARRAY
+    data = outputs_dict["data"]
+    
+    # print(data)
+    
+    print(f"received {sample} data")
+    
+    # GATHER DATA FROM WORKERS BEFORE MERGING?
+    if sample in all_data.keys():
+        print("all_data[sample] exists:")
+        print(all_data[sample])
+        # print(data)
+        all_data[sample] = ak.concatenate( [all_data[sample], data], axis=1) 
+        
+    else:
+        print("all_data[sample] doesn't exist")
+        all_data[sample] = ak.concatenate(data) 
+        print("length of all_data: ", len(all_data))
+        
+    #### hmmm
+    print("consuming cancelled?")
+    print("length of all_data: ", len(all_data))
+    if len(all_data) >= 4:
+        ch.stop_consuming()
+        print("STOPPED CONSUMING")    
+    
+    
 
-
-    print(f"MASTER published {sample}")
+    
+    
     
 # for sample in samples:
 # while len(all_data)
-# setup to listen for messages on queue 'messages'
-channel.basic_consume(queue='sending_all',
+# setup to listen for messages on queue 'master_to_worker'
+channel.basic_consume(queue='worker_to_master',
                     auto_ack=True,
                     on_message_callback=receive_data)
 
 
 print("MASTER consuming")
 
+# channel.start_consuming()
+    
+
+
+
+for sample in samples: 
+    # Print which sample is being processed
+    print(f'{sample} samples') 
+
+    # Define empty list to hold data
+    frames = [] 
+
+    # Loop over each file
+    for value in samples[sample]['list']: 
+        if sample == 'data': 
+            prefix = "Data/" 
+        else: 
+            prefix = f"MC/mc_{str(infofile.infos[value]['DSID'])}."
+        fileString = f"{path}{prefix}{value}.4lep.root" 
+
+
+        print(f"\t{value}:") 
+        start = time.time() 
+
+        # Open file
+        tree = uproot.open(f"{fileString}:mini")
+        
+        num_entries = tree.num_entries*run_time_speed
+        
+        sample_data = []
+
+
+        data_chunks = np.arange(0, num_entries, 100_000)
+        
+        for chunk_start in data_chunks:
+            entry_start = chunk_start
+            entry_stop = min([entry_start + 100_000, num_entries])
+            
+            # send info
+            inputs_dict = {"tree":tree, "variables":variables, "relevant_weights":relevant_weights,
+                                "entry_start":entry_start, "entry_stop":entry_stop, "value":value, "sample":sample}
+            
+            publish(inputs_dict, sample, "master_to_worker", "MASTER")
+
+
+
 # start listening
 channel.start_consuming()
+    
+
+        # frames.append(ak.concatenate(sample_data)) 
+    
+    
+    # GATHER DATA FROM WORKERS BEFORE MERGING?
+    # all_data[sample] = ak.concatenate(frames) # dictionary entry is concatenated awkward arrays
+
+   
+# print("concatenating data")
+# for sample in all_data:
+#     print("sample: ", sample)
+#     all_data[sample] = ak.concatenate(all_data[sample])
+
+
+print(all_data)
+print(all_data["data"])
 
 print("MASTER consumed")
 
-print(len(all_data))
+print("LENGTH: ", len(all_data))
 
-if len(all_data)==4:
-    print("final analysis")
-    final_anal(all_data, samples)
+# if len(all_data)==4:
+print("final analysis")
+final_anal(all_data, samples)
     
 # print("closing channel")
 
 # channel.close()
 # 
 print("finished?")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
