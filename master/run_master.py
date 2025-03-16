@@ -7,13 +7,13 @@ print("connection starting")
 # params = pika.ConnectionParameters('localhost')
 
 # when RabbitMQ broker is running on network
-# params = pika.ConnectionParameters('rabbitmq')
+params = pika.ConnectionParameters('rabbitmq')
 
 
 # when starting services with docker compose
-params = pika.ConnectionParameters(
-    'rabbitmq',
-    heartbeat=0)
+# params = pika.ConnectionParameters(
+#     'rabbitmq',
+#     heartbeat=0)
 
 print("connection started")
 

@@ -5,12 +5,12 @@ import pika
 # params = pika.ConnectionParameters('localhost')
 
 # when RabbitMQ broker is running on network
-# params = pika.ConnectionParameters('rabbitmq')
+params = pika.ConnectionParameters('rabbitmq')
 
 # when starting services with docker compose
-params = pika.ConnectionParameters(
-   'rabbitmq',
-   heartbeat=0)
+# params = pika.ConnectionParameters(
+#    'rabbitmq',
+#    heartbeat=0)
 
 # create the connection to broker
 connection = pika.BlockingConnection(params)
@@ -126,7 +126,7 @@ def worker_work(ch, method, properties, inputs):
 
 
         # Print which sample is being processed
-        print(f'WORKER received {sample}') 
+        print(f'{sample} samples') 
 
         # Define empty list to hold data
         frames = [] 
