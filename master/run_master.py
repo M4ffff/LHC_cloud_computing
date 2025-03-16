@@ -302,13 +302,20 @@ def receive_data(ch, method, properties, outputs):
     # GATHER DATA FROM WORKERS BEFORE MERGING?
     if sample in all_data.keys():
         print("all_data[sample] exists:")
-        print(all_data[sample])
+        # print(all_data[sample])
         # print(data)
-        all_data[sample] = ak.concatenate( [all_data[sample], data], axis=1) 
+        current_sample = all_data[sample]
+        print(data[0])
+        print(len(data[0]))
+        print(current_sample)
+        print(len(current_sample))
+        updated_version = ak.concatenate( [current_sample, data[0]] )
+        print(len(updated_version))
+        all_data[sample] = ( updated_version )
         
     else:
         print("all_data[sample] doesn't exist")
-        all_data[sample] = ak.concatenate(data) 
+        all_data[sample] = (data[0]) 
         print("length of all_data: ", len(all_data))
         
     #### hmmm

@@ -205,16 +205,24 @@ for sample in samples:
 
             # Append data to the whole sample data list
             sample_data.append(data)
-
+        print(sample_data[0])
+        print(len(sample_data[0]))
+        # # print(ak.count(sample_data))
+        print((ak.concatenate(sample_data)))
+        # # print(ak.concatenate(ak.concatenate(sample_data), axis=1))
+        print(len(ak.concatenate(sample_data)))
         frames.append(ak.concatenate(sample_data)) 
-
+    print(frames)
+    print(len(frames))
+    print(ak.concatenate(frames))
+    print(len(ak.concatenate(frames)))
 
     # GATHER DATA FROM WORKERS BEFORE MERGING?
     all_data[sample] = ak.concatenate(frames) # dictionary entry is concatenated awkward arrays
 
 
 print(len(all_data))
-print((all_data).shape)
+# print((all_data).shape)
 
 # PLOTTING
 

@@ -45,12 +45,12 @@ def publish(dict, sample, routing_key, container):
     
     outputs = pkl.dumps(dict)
     
-    print(f"{container} publishing {sample}")
+    # print(f"{container} publishing {sample}")
 
     channel.basic_publish(exchange='',
                         routing_key=routing_key,
                         body=outputs)
-    print(f"{container} published {sample}")
+    # print(f"{container} published {sample}")
 
 #%% FUNCTIONS
 
