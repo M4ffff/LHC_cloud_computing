@@ -1,5 +1,7 @@
 **Header**
-Project to analyse data from LHC, using Docker for cloud computing
+Project to analyse data from LHC, using Docker for cloud computing.
+
+Analysis based on HZZAnalysis Jupyter notebook (url).
 
 docker image build -t master_image master/.
 docker image build -t worker_image worker/.

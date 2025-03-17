@@ -7,13 +7,13 @@ print("connection starting")
 # params = pika.ConnectionParameters('localhost')
 
 # when RabbitMQ broker is running on network
-# params = pika.ConnectionParameters('rabbitmq')
+params = pika.ConnectionParameters('rabbitmq')
 
 
 # when starting services with docker compose
-params = pika.ConnectionParameters(
-    'rabbitmq',
-    heartbeat=0)
+# params = pika.ConnectionParameters(
+#     'rabbitmq',
+#     heartbeat=0)
 
 print("connection started")
 
@@ -46,36 +46,37 @@ def final_anal(all_data, samples):
     bin_edges = np.arange(xmin, xmax+step_size, step_size ) 
     bin_centres = np.arange(xmin+step_size/2, xmax+step_size/2, step_size ) 
 
-
     fig, ax = plt.subplots(figsize=(15,5)) 
 
-
-    real_data = np.histogram(ak.to_numpy(all_data['data']['mass']), bin_edges )[0] # histogram the data
-    real_data_errors = np.sqrt( real_data ) # statistical error on the data
+    data = np.histogram(ak.to_numpy(all_data['data']['mass']), bin_edges )[0] 
+    data_errors = np.sqrt( data ) 
 
     # signal
-    signal_x = ak.to_numpy(all_data[r'Signal ($m_H$ = 125 GeV)']['mass'])
-    # weights of signal events
+    signal = ak.to_numpy(all_data[r'Signal ($m_H$ = 125 GeV)']['mass'])
+    # weights of each signal events
     signal_weights = ak.to_numpy(all_data[r'Signal ($m_H$ = 125 GeV)'].totalWeight)
     # colour of signal bar
     signal_color = samples[r'Signal ($m_H$ = 125 GeV)']['color']
 
-    mc_x = [] # define list to hold the Monte Carlo histogram entries
-    mc_weights = [] # define list to hold the Monte Carlo weights
-    mc_colors = [] # define list to hold the colors of the Monte Carlo bars
-    mc_labels = [] # define list to hold the legend labels of the Monte Carlo bars
+    # monte carlo entries
+    mc = [] 
+    # weights of each entry
+    mc_weights = [] 
+    # colour and label of each MC bar
+    mc_colours = [] 
+    mc_labels = [] 
 
 
     print("adding samples")
 
 
     #### potentially send too?
-    for sample in [r'Background $Z,t\bar{t}$', r'Background $ZZ^*$']: # loop over samples
-        # if sample not in ['data', r'Signal ($m_H$ = 125 GeV)']: # if not data nor signal
-            mc_x.append( ak.to_numpy(all_data[sample]['mass']) ) # append to the list of Monte Carlo histogram entries
-            mc_weights.append( ak.to_numpy(all_data[sample].totalWeight) ) # append to the list of Monte Carlo weights
-            mc_colors.append( samples[sample]['color'] ) # append to the list of Monte Carlo bar colors
-            mc_labels.append( sample ) # append to the list of Monte Carlo legend labels
+    # loop over background samples
+    for sample in [r'Background $Z,t\bar{t}$', r'Background $ZZ^*$']: 
+        mc.append( ak.to_numpy(all_data[sample]['mass']) ) 
+        mc_weights.append( ak.to_numpy(all_data[sample].totalWeight) ) 
+        mc_colours.append( samples[sample]['color'] ) 
+        mc_labels.append( sample ) 
 
     print("done adding samples")
     print("start plotting")
@@ -83,83 +84,57 @@ def final_anal(all_data, samples):
     #%% Plot data points
 
     # plot the data points
-    ax.errorbar(x=bin_centres, y=real_data, yerr=real_data_errors,
-                        fmt='ko', # 'k' means black and 'o' is for circles 
-                        label='Data') 
-
-
-    #%% Plot background mc signals
+    ax.errorbar(x=bin_centres, y=data, yerr=data_errors, fmt='ko', label='Data') 
 
     # plot the Monte Carlo bars
-    mc_heights = ax.hist(mc_x, bins=bin_edges, 
-                                weights=mc_weights, stacked=True, 
-                                color=mc_colors, label=mc_labels )
+    mc_heights = ax.hist(mc, bins=bin_edges, weights=mc_weights, stacked=True, 
+                                color=mc_colours, label=mc_labels )
 
-    mc_x_tot = mc_heights[0][-1] # stacked background MC y-axis value
-
-    # calculate MC statistical uncertainty: sqrt(sum w^2)
-    mc_x_err = np.sqrt(np.histogram(np.hstack(mc_x), bins=bin_edges, weights=np.hstack(mc_weights)**2)[0])
+    # stacked background MC y-axis value
+    mc_tot = mc_heights[0][-1]
 
 
-
-    #%% plot higgs signal
-
-    # plot the signal bar
-    signal_heights = ax.hist(signal_x, bins=bin_edges, bottom=mc_x_tot, 
+    # plot signal bars
+    signal_heights = ax.hist(signal, bins=bin_edges, bottom=mc_tot, 
                     weights=signal_weights, color=signal_color,
                     label=r'Signal ($m_H$ = 125 GeV)')
+    
+    # calculate MC statistical uncertainty
+    mc_err = np.sqrt(np.histogram(np.hstack(mc), bins=bin_edges, weights=np.hstack(mc_weights)**2)[0])
 
-    # plot the statistical uncertainty
-    ax.bar(bin_centres, # x
-                    2*mc_x_err, # heights
-                    alpha=0.5, # half transparency
-                    bottom=mc_x_tot-mc_x_err, color='none', 
+    # plot statistical uncertainty
+    ax.bar(bin_centres, 2*mc_err, alpha=0.5, bottom=mc_tot-mc_err, color='none', 
                     hatch="////", width=step_size, label='Stat. Unc.' )
 
 
-
-    #%% figure configuration
-
     # set the x-limit of the main axes
     ax.set_xlim( left=xmin, right=xmax ) 
-
+    ax.set_ylim( bottom=0, top=np.amax(data)*1.6 )
+    
+    
+    
     # separation of x axis minor ticks
     ax.xaxis.set_minor_locator( AutoMinorLocator() ) 
-
+    ax.yaxis.set_minor_locator( AutoMinorLocator() ) 
+    
+    
     # set the axis tick parameters for the main axes
     ax.tick_params(which='both', # ticks on both x and y axes
                             direction='in', # Put ticks inside and outside the axes
                             top=True, # draw ticks on the top axis
                             right=True ) # draw ticks on right axis
 
-    # x-axis label
+
+    # axis labels
     ax.set_xlabel(r'4-lepton invariant mass $\mathrm{m_{4l}}$ [GeV]',
                         fontsize=13, x=1, horizontalalignment='right' )
 
-    # write y-axis label for main axes
     ax.set_ylabel('Events / '+str(step_size)+' GeV',
                             y=1, horizontalalignment='right') 
 
-    # set y-axis limits for main axes
-    ax.set_ylim( bottom=0, top=np.amax(real_data)*1.6 )
-
-    # add minor ticks on y-axis for main axes
-    ax.yaxis.set_minor_locator( AutoMinorLocator() ) 
 
     # Add text 'ATLAS Open Data' on plot
-    plt.text(0.05, # x
-                0.93, # y
-                'ATLAS Open Data', # text
-                transform=ax.transAxes, # coordinate system used is that of main_axes
-                fontsize=13 ) 
-
-    # Add text 'for education' on plot
-    plt.text(0.05, # x
-                0.88, # y
-                'for education', # text
-                transform=ax.transAxes, # coordinate system used is that of main_axes
-                style='italic',
-                fontsize=8 ) 
+    plt.text(0.05, 0.93, 'ATLAS Open Data', transform=ax.transAxes, fontsize=13 ) 
 
     # Add energy and luminosity
     lumi_used = str(lumi*run_time_speed) # luminosity to write on the plot
@@ -177,23 +152,28 @@ def final_anal(all_data, samples):
     # draw the legend
     ax.legend( frameon=False ) # no box around the legend
 
+    # save figure to container
     output_path = "/output_container/figure.png"
     print(f"Saving figure to: {output_path}")
     plt.savefig(output_path)
 
 
     # Signal stacked height
-    signal_tot = signal_heights[0] + mc_x_tot
+    signal_tot = signal_heights[0] + mc_tot
 
+    # find index of maximum signal
+    max_index = np.argmax(signal_heights[0])
+    print("max_index: ", max_index)
+    
     # Peak of signal
-    print("peak: ", signal_tot[8])
+    print("peak: ", signal_tot[max_index])
 
     # Neighbouring bins
-    print("Neighbouring bins: ", signal_tot[7:10])
+    print("Neighbouring bins: ", signal_tot[max_index-1:max_index+2])
 
     # Signal and background events
-    N_sig = signal_tot[7:10].sum()
-    N_bg = mc_x_tot[7:10].sum()
+    N_sig = signal_tot[max_index-1:max_index+2].sum()
+    N_bg = mc_tot[max_index-1:max_index+2].sum()
 
     # Signal significance calculation
     signal_significance = N_sig/np.sqrt(N_bg + 0.3 * N_bg**2) 
@@ -378,15 +358,17 @@ for sample in samples:
         # Open file
         tree = uproot.open(f"{fileString}:mini")
         
+        # calculate number of entries in this sample value
         num_entries = tree.num_entries*run_time_speed
-        all_num_entries[sample] = num_entries
+        print("number entries: ", num_entries)
         
+        # add to dictionary
+        all_num_entries[sample] = num_entries
         
         sample_data = []
 
         # calculate amount of data to send to each worker
         chunk_size = round(num_entries / num_workers)
-        print("number entries: ", num_entries)
         print("chunk size: ", chunk_size)
         
         # ensures tiny bits of data aren't sent to multiple workers - send data of at least size min_chunk_size to each worker.  
