@@ -27,7 +27,7 @@ import os
 import infofile
 import time
 import uproot
-
+import docker
 
 MeV = 0.001
 GeV = 1.0
@@ -66,10 +66,6 @@ def final_anal(all_data, samples):
     mc_colours = [] 
     mc_labels = [] 
 
-
-    print("adding samples")
-
-
     #### potentially send too?
     # loop over background samples
     for sample in [r'Background $Z,t\bar{t}$', r'Background $ZZ^*$']: 
@@ -78,7 +74,6 @@ def final_anal(all_data, samples):
         mc_colours.append( samples[sample]['color'] ) 
         mc_labels.append( sample ) 
 
-    print("done adding samples")
     print("start plotting")
 
     #%% Plot data points
@@ -194,9 +189,10 @@ channel = connection.channel()
 channel.queue_declare(queue='master_to_worker')
 channel.queue_declare(queue='worker_to_master')
 
-# num_workers = channel.queue_declare(queue='master_to_worker').method.consumer_count
-num_workers = 3
-print("NUMBER OF WORKERS: ", num_workers)
+
+
+
+
 
 
 
@@ -213,14 +209,14 @@ path = "https://atlas-opendata.web.cern.ch/atlas-opendata/samples/2020/4lep/"
 ### order changed, so longest/biggest datasets are calculated first
 # allows smaller sets to fill in once workers free up
 samples = {
-    r'Background $Z,t\bar{t}$' : { # Z + ttbar
-        'list' : ['Zee','Zmumu','ttbar_lep'],
-        'color' : "#6b59d3" # purple
-    },
-    
     r'Background $ZZ^*$' : { # ZZ
         'list' : ['llll'],
         'color' : "#ff0000" # red
+    },
+    
+    r'Background $Z,t\bar{t}$' : { # Z + ttbar
+        'list' : ['Zee','Zmumu','ttbar_lep'],
+        'color' : "#6b59d3" # purple
     },
     
     r'Signal ($m_H$ = 125 GeV)' : { # H -> ZZ -> llll
@@ -306,8 +302,18 @@ def receive_data(ch, method, properties, outputs):
             print(f"{sample} timing: {elapsed:.2f} s")
     
 
-    
-    
+# one second wait to ensure containers have activated
+time.sleep(1)
+print("pause done")
+
+# Determine number of available workers
+queue_info = channel.queue_declare(queue='master_to_worker', passive=True)
+num_workers = queue_info.method.consumer_count
+
+# num_workers = 3
+print("FETCHED NUMBER OF WORKERS: ", num_workers) 
+
+
     
 # for sample in samples:
 # while len(all_data)
@@ -326,16 +332,16 @@ all_num_entries = {}
 timings = {}
 start = time.time() 
 
-for sample in samples: 
+for i,sample in enumerate(samples): 
     # Print which sample is being processed
-    print(f'{sample} samples') 
+    print(f'{sample}') 
 
     # Define empty list to hold data
     frames = [] 
 
     # print(f"\t{sample}:") 
-    start = time.time() 
-    timings[sample] = start
+    # start = time.time() 
+    # timings[sample] = start
 
     # Loop over each file
     for value in samples[sample]['list']: 
@@ -354,7 +360,7 @@ for sample in samples:
         
         # calculate number of entries in this sample value
         num_entries = tree.num_entries*run_time_speed
-        print("number entries: ", num_entries)
+        print(f"{sample} {value}"  )
         
         # add to dictionary
         all_num_entries[sample] = num_entries
@@ -362,19 +368,20 @@ for sample in samples:
         sample_data = []
 
         # calculate amount of data to send to each worker
-        chunk_size = round(num_entries / num_workers)
-        print("chunk size: ", chunk_size)
+        chunk_size = round(num_entries / (num_workers+i))
         
         # ensures tiny bits of data aren't sent to multiple workers - send data of at least size min_chunk_size to each worker.  
-        min_chunk_size = 2000
+        min_chunk_size = 10000
         if chunk_size < min_chunk_size:
             chunk_size=min_chunk_size
-            print("new chunk size: ", chunk_size)
+
+        print("chunk size: ", chunk_size)
 
         # split into chunks depending on numbers of workers, so each worker gets rouhgly same amount of data to analyse
         # chunk_size+1 ensures there is not more chunks than workers. 
         data_chunks = np.arange(0, num_entries, chunk_size+1)
-        print("data chunks:", data_chunks)
+        print(f"\t number entries: {num_entries}     chunk size: {chunk_size}  ")
+        print(f"\t data chunks: {data_chunks} \n")
         
         # send each chunk of data of this sample value to each worker. 
         for chunk_start in data_chunks:
@@ -398,20 +405,6 @@ print("\nfinal analysis")
 final_anal(all_data, samples)
  
 print("finished!")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

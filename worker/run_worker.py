@@ -143,7 +143,7 @@ def worker_work(ch, method, properties, inputs):
 
 
     # Print which sample is being processed
-    print(f'WORKER received {sample}, chunk {entry_start} to {entry_stop}') 
+    print(f'WORKER received {sample} {value}, chunk {entry_start} to {entry_stop}') 
  
 
     local_sample_data = []
