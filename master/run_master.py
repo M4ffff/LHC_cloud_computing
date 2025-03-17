@@ -68,6 +68,8 @@ def final_anal(all_data, samples):
 
     print("adding samples")
 
+
+    #### potentially send too?
     for sample in [r'Background $Z,t\bar{t}$', r'Background $ZZ^*$']: # loop over samples
         # if sample not in ['data', r'Signal ($m_H$ = 125 GeV)']: # if not data nor signal
             mc_x.append( ak.to_numpy(all_data[sample]['mass']) ) # append to the list of Monte Carlo histogram entries
@@ -175,8 +177,13 @@ def final_anal(all_data, samples):
     # draw the legend
     ax.legend( frameon=False ) # no box around the legend
 
-    plt.show()
-
+    output_path = "/output_container/figure.png"
+    print(f"Saving figure to: {output_path}")
+    plt.savefig(output_path)
+    
+    # cwd = os.getcwd()
+    # print(cwd)
+    # print("cwd^^")
 
     # Signal stacked height
     signal_tot = signal_heights[0] + mc_x_tot
@@ -200,12 +207,9 @@ def publish(dict, sample, routing_key, container):
     
     outputs = pkl.dumps(dict)
     
-    print(f"{container} publishing {sample}")
-
     channel.basic_publish(exchange='',
                         routing_key=routing_key,
                         body=outputs)
-    print(f"{container} published {sample}")
 
 
 
@@ -220,7 +224,6 @@ channel = connection.channel()
 # create the queue, if it doesn't already exist
 channel.queue_declare(queue='master_to_worker')
 channel.queue_declare(queue='worker_to_master')
-
 
 
 
@@ -278,52 +281,54 @@ luminosity = 10
 
 # Controls the fraction of all events analysed
 # change lower to run quicker
-run_time_speed = 0.5
+run_time_speed = 1
 
     
 # Dictionary to hold awkward arrays
 all_data = {} 
-
+counter = 0
     
 
 def receive_data(ch, method, properties, outputs):
-    print("MASTER receiving some kind of data")
+    global counter
+    global timings
+    # print("MASTER receiving some kind of data")
     outputs_dict = pkl.loads(outputs)
     # print(outputs_dict.keys())
     
     sample = outputs_dict["sample"]
-    # THIS IS AN AWKWARD ARRAY
+    value = outputs_dict["value"]
+    # THIS IS A LIST OF LIST OF AWKWARD ARRAYs
     data = outputs_dict["data"]
+    entry_stop = outputs_dict["entry_stop"]
+    entry_start = outputs_dict["entry_start"]
     
-    # print(data)
+    print(f"received {sample} {value} data, chunk: {entry_start} to {entry_stop}")
     
-    print(f"received {sample} data")
-    
-    # GATHER DATA FROM WORKERS BEFORE MERGING?
     if sample in all_data.keys():
-        print("all_data[sample] exists:")
-        # print(all_data[sample])
-        # print(data)
+        # print("all_data[sample] exists:")
         current_sample = all_data[sample]
-        print(data[0])
-        print(len(data[0]))
-        print(current_sample)
-        print(len(current_sample))
         updated_version = ak.concatenate( [current_sample, data[0]] )
-        print(len(updated_version))
         all_data[sample] = ( updated_version )
         
     else:
-        print("all_data[sample] doesn't exist")
+        # print("all_data[sample] doesn't exist")
         all_data[sample] = (data[0]) 
-        print("length of all_data: ", len(all_data))
+        # print("length of all_data: ", len(all_data))
         
     #### hmmm
-    print("consuming cancelled?")
-    print("length of all_data: ", len(all_data))
-    if len(all_data) >= 4:
-        ch.stop_consuming()
-        print("STOPPED CONSUMING")    
+    # print("consuming cancelled?")
+    # print("length of all_data: ", len(all_data))
+    
+    if entry_stop == all_num_entries[sample]:
+        print("COUNTER INCREASING")
+        end = time.time()
+        elapsed = end - timings[sample]
+        print(f"{sample} timing: {elapsed:.2f} s")
+        counter += 1
+        if counter >= 4:
+            ch.stop_consuming()
+            print("STOPPED CONSUMING")    
     
     
 
@@ -343,6 +348,8 @@ print("MASTER consuming")
 # channel.start_consuming()
     
 
+all_num_entries = {}
+timings = {}
 
 
 for sample in samples: 
@@ -351,6 +358,10 @@ for sample in samples:
 
     # Define empty list to hold data
     frames = [] 
+
+    # print(f"\t{sample}:") 
+    start = time.time() 
+    timings[sample] = start
 
     # Loop over each file
     for value in samples[sample]['list']: 
@@ -361,29 +372,35 @@ for sample in samples:
         fileString = f"{path}{prefix}{value}.4lep.root" 
 
 
-        print(f"\t{value}:") 
-        start = time.time() 
+        print(f"{sample} {value} being published")
+        
 
         # Open file
         tree = uproot.open(f"{fileString}:mini")
         
         num_entries = tree.num_entries*run_time_speed
+        all_num_entries[sample] = num_entries
+        
         
         sample_data = []
 
+        chunk_size = 100_000
+        # chunk_size = num_entries / num_workers
+        # print("chunk size: ", chunk_size)
+        # print("number entries: ", num_entries)
 
-        data_chunks = np.arange(0, num_entries, 100_000)
+        data_chunks = np.arange(0, num_entries, chunk_size)
         
         for chunk_start in data_chunks:
             entry_start = chunk_start
-            entry_stop = min([entry_start + 100_000, num_entries])
+            entry_stop = min([entry_start + chunk_size, num_entries])
             
             # send info
             inputs_dict = {"tree":tree, "variables":variables, "relevant_weights":relevant_weights,
                                 "entry_start":entry_start, "entry_stop":entry_stop, "value":value, "sample":sample}
             
             publish(inputs_dict, sample, "master_to_worker", "MASTER")
-
+    
 
 
 # start listening
@@ -396,19 +413,10 @@ channel.start_consuming()
     # GATHER DATA FROM WORKERS BEFORE MERGING?
     # all_data[sample] = ak.concatenate(frames) # dictionary entry is concatenated awkward arrays
 
-   
-# print("concatenating data")
-# for sample in all_data:
-#     print("sample: ", sample)
-#     all_data[sample] = ak.concatenate(all_data[sample])
-
-
-print(all_data)
-print(all_data["data"])
 
 print("MASTER consumed")
 
-print("LENGTH: ", len(all_data))
+# print("LENGTH: ", len(all_data))
 
 # if len(all_data)==4:
 print("final analysis")

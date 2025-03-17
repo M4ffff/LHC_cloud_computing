@@ -148,16 +148,10 @@ def worker_work(ch, method, properties, inputs):
 
     # Loop over data in the tree
     for data in tree.iterate(variables + relevant_weights, library="ak", entry_start=entry_start,
-                            entry_stop=entry_stop, step_size = 1000000):
+                            entry_stop=entry_stop, step_size = 1_000_000):
         
         # Number of events in this batch
         nIn = len(data) 
-                            
-        # Record transverse momenta (see bonus activity for explanation)
-        data['leading_lep_pt'] = data['lep_pt'][:,0]
-        data['sub_leading_lep_pt'] = data['lep_pt'][:,1]
-        data['third_leading_lep_pt'] = data['lep_pt'][:,2]
-        data['last_lep_pt'] = data['lep_pt'][:,3]
 
         # Cuts
         lepton_type = data['lep_type']
@@ -180,7 +174,7 @@ def worker_work(ch, method, properties, inputs):
         local_sample_data.append(data)
 
 
-    outputs_dict = {"sample":sample, "data":local_sample_data}
+    outputs_dict = {"sample":sample, "data":local_sample_data, "entry_stop":entry_stop, "entry_start":entry_start, "value":value}
     # outputs = pkl.dumps(outputs_dict)
     
     publish(outputs_dict, sample, "worker_to_master", "WORKER")
