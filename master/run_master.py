@@ -180,10 +180,7 @@ def final_anal(all_data, samples):
     output_path = "/output_container/figure.png"
     print(f"Saving figure to: {output_path}")
     plt.savefig(output_path)
-    
-    # cwd = os.getcwd()
-    # print(cwd)
-    # print("cwd^^")
+
 
     # Signal stacked height
     signal_tot = signal_heights[0] + mc_x_tot
@@ -224,6 +221,9 @@ channel = connection.channel()
 # create the queue, if it doesn't already exist
 channel.queue_declare(queue='master_to_worker')
 channel.queue_declare(queue='worker_to_master')
+
+num_workers = channel.queue_declare(queue='master_to_worker').method.consumer_count
+print("NUMBER OF WORKERS: ", num_workers)
 
 
 
@@ -292,6 +292,7 @@ counter = 0
 def receive_data(ch, method, properties, outputs):
     global counter
     global timings
+    global start
     # print("MASTER receiving some kind of data")
     outputs_dict = pkl.loads(outputs)
     # print(outputs_dict.keys())
@@ -322,14 +323,13 @@ def receive_data(ch, method, properties, outputs):
     
     if entry_stop == all_num_entries[sample]:
         print("COUNTER INCREASING")
-        end = time.time()
-        elapsed = end - timings[sample]
-        print(f"{sample} timing: {elapsed:.2f} s")
         counter += 1
         if counter >= 4:
             ch.stop_consuming()
-            print("STOPPED CONSUMING")    
-    
+            print("STOPPED CONSUMING")  
+            end = time.time()  
+            elapsed = end - start
+            print(f"{sample} timing: {elapsed:.2f} s")
     
 
     
@@ -350,7 +350,7 @@ print("MASTER consuming")
 
 all_num_entries = {}
 timings = {}
-
+start = time.time() 
 
 for sample in samples: 
     # Print which sample is being processed
@@ -384,13 +384,23 @@ for sample in samples:
         
         sample_data = []
 
-        chunk_size = 100_000
-        # chunk_size = num_entries / num_workers
-        # print("chunk size: ", chunk_size)
-        # print("number entries: ", num_entries)
-
-        data_chunks = np.arange(0, num_entries, chunk_size)
+        # calculate amount of data to send to each worker
+        chunk_size = round(num_entries / num_workers)
+        print("number entries: ", num_entries)
+        print("chunk size: ", chunk_size)
         
+        # ensures tiny bits of data aren't sent to multiple workers - send data of at least size min_chunk_size to each worker.  
+        min_chunk_size = 2000
+        if chunk_size < min_chunk_size:
+            chunk_size=min_chunk_size
+            print("new chunk size: ", chunk_size)
+
+        # split into chunks depending on numbers of workers, so each worker gets rouhgly same amount of data to analyse
+        # chunk_size+1 ensures there is not more chunks than workers. 
+        data_chunks = np.arange(0, num_entries, chunk_size+1)
+        print("data chunks:", data_chunks)
+        
+        # send each chunk of data of this sample value to each worker. 
         for chunk_start in data_chunks:
             entry_start = chunk_start
             entry_stop = min([entry_start + chunk_size, num_entries])
@@ -407,26 +417,11 @@ for sample in samples:
 channel.start_consuming()
     
 
-        # frames.append(ak.concatenate(sample_data)) 
-    
-    
-    # GATHER DATA FROM WORKERS BEFORE MERGING?
-    # all_data[sample] = ak.concatenate(frames) # dictionary entry is concatenated awkward arrays
 
-
-print("MASTER consumed")
-
-# print("LENGTH: ", len(all_data))
-
-# if len(all_data)==4:
-print("final analysis")
+print("\nfinal analysis")
 final_anal(all_data, samples)
-    
-# print("closing channel")
-
-# channel.close()
-# 
-print("finished?")
+ 
+print("finished!")
 
 
 
