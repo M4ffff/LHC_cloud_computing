@@ -107,28 +107,23 @@ def final_anal(all_data, samples):
                     hatch="////", width=step_size, label='Stat. Unc.' )
 
 
-    # set the x-limit of the main axes
+    # set the limits of the axes
     ax.set_xlim( left=xmin, right=xmax ) 
     ax.set_ylim( bottom=0, top=np.amax(data)*1.6 )
     
-    
-    
-    # separation of x axis minor ticks
+
+    # set axes ticks
     ax.xaxis.set_minor_locator( AutoMinorLocator() ) 
     ax.yaxis.set_minor_locator( AutoMinorLocator() ) 
     
     
     # set the axis tick parameters for the main axes
-    ax.tick_params(which='both', # ticks on both x and y axes
-                            direction='in', # Put ticks inside and outside the axes
-                            top=True, # draw ticks on the top axis
-                            right=True ) # draw ticks on right axis
+    ax.tick_params(which='both', direction='in', top=True, right=True ) # draw ticks on right axis
 
 
     # axis labels
     ax.set_xlabel(r'4-lepton invariant mass $\mathrm{m_{4l}}$ [GeV]',
                         fontsize=13, x=1, horizontalalignment='right' )
-
     ax.set_ylabel('Events / '+str(step_size)+' GeV',
                             y=1, horizontalalignment='right') 
 
@@ -153,7 +148,7 @@ def final_anal(all_data, samples):
     ax.legend( frameon=False ) # no box around the legend
 
     # save figure to container
-    output_path = "/output_container/figure.png"
+    output_path = "/output_container/figure2.png"
     print(f"Saving figure to: {output_path}")
     plt.savefig(output_path)
 
@@ -180,10 +175,8 @@ def final_anal(all_data, samples):
     print(f"\nResults:\n{N_sig = :.3f}\n{N_bg = :.3f}\n{signal_significance = :.3f}")
     
 
-def publish(dict, sample, routing_key, container):
-    
+def publish(dict, routing_key):
     outputs = pkl.dumps(dict)
-    
     channel.basic_publish(exchange='',
                         routing_key=routing_key,
                         body=outputs)
@@ -191,7 +184,6 @@ def publish(dict, sample, routing_key, container):
 
 
 ### RECEIVE DATA
-
 
 # create the connection to broker
 connection = pika.BlockingConnection(params)
@@ -202,7 +194,8 @@ channel = connection.channel()
 channel.queue_declare(queue='master_to_worker')
 channel.queue_declare(queue='worker_to_master')
 
-num_workers = channel.queue_declare(queue='master_to_worker').method.consumer_count
+# num_workers = channel.queue_declare(queue='master_to_worker').method.consumer_count
+num_workers = 3
 print("NUMBER OF WORKERS: ", num_workers)
 
 
@@ -217,25 +210,26 @@ GeV = 1.0
 path = "https://atlas-opendata.web.cern.ch/atlas-opendata/samples/2020/4lep/" 
 
 
-### redo
+### order changed, so longest/biggest datasets are calculated first
+# allows smaller sets to fill in once workers free up
 samples = {
-    'data': {
-        'list' : ['data_A','data_B','data_C','data_D'], 
-    },
-
     r'Background $Z,t\bar{t}$' : { # Z + ttbar
         'list' : ['Zee','Zmumu','ttbar_lep'],
         'color' : "#6b59d3" # purple
     },
-
+    
     r'Background $ZZ^*$' : { # ZZ
         'list' : ['llll'],
         'color' : "#ff0000" # red
     },
-
+    
     r'Signal ($m_H$ = 125 GeV)' : { # H -> ZZ -> llll
         'list' : ['ggH125_ZZ4lep','VBFH125_ZZ4lep','WH125_ZZ4lep','ZH125_ZZ4lep'],
         'color' : "#00cdff" # light blue
+    },
+
+    'data': {
+        'list' : ['data_A','data_B','data_C','data_D'], 
     },
 }
 
@@ -261,7 +255,7 @@ luminosity = 10
 
 # Controls the fraction of all events analysed
 # change lower to run quicker
-run_time_speed = 1
+run_time_speed = 0.5
 
     
 # Dictionary to hold awkward arrays
@@ -391,7 +385,7 @@ for sample in samples:
             inputs_dict = {"tree":tree, "variables":variables, "relevant_weights":relevant_weights,
                                 "entry_start":entry_start, "entry_stop":entry_stop, "value":value, "sample":sample}
             
-            publish(inputs_dict, sample, "master_to_worker", "MASTER")
+            publish(inputs_dict, "master_to_worker")
     
 
 

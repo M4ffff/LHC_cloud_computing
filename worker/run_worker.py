@@ -34,6 +34,7 @@ import numpy as np
 import matplotlib.pyplot as plt 
 from matplotlib.ticker import AutoMinorLocator 
 import pickle as pkl
+# import numba as nb
 
 MeV = 0.001
 GeV = 1.0
@@ -55,6 +56,7 @@ def publish(dict, sample, routing_key, container):
 #%% FUNCTIONS
 
 # check lepton type of 4 leptons to check they come in pairs
+# @nb.njit()
 def check_lepton_type(lepton_type):
     """
     Check there are pairs of the same lepton type 

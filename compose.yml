@@ -17,7 +17,7 @@ services:
   consumer:
     # build: ./worker
     image: worker_image
-    scale: 3
+    # scale: 3
     networks:
       - rabbit
     depends_on:
@@ -31,3 +31,6 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+    volumes:
+      - ./:/output_container
+    restart: no
