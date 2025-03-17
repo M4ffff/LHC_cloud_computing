@@ -251,7 +251,7 @@ luminosity = 10
 
 # Controls the fraction of all events analysed
 # change lower to run quicker
-run_time_speed = 0.5
+run_time_speed = 1
 
     
 # Dictionary to hold awkward arrays
@@ -368,7 +368,7 @@ for i,sample in enumerate(samples):
         sample_data = []
 
         # calculate amount of data to send to each worker
-        chunk_size = round(num_entries / (num_workers+i))
+        chunk_size = round(num_entries / (num_workers))
         
         # ensures tiny bits of data aren't sent to multiple workers - send data of at least size min_chunk_size to each worker.  
         min_chunk_size = 10000
