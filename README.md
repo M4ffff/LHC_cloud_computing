@@ -8,3 +8,5 @@ docker run --rm -d -p 15672:15672 -p 5672:5672 --network rabbit --name rabbitmq 
 
 docker run --rm -it --network rabbit --name master_container master_image
 docker run --rm -it --network rabbit --name worker_container worker_image
+
+docker run --rm -it --network rabbit --name master_container --mount src="$(pwd)",target=/output_container,type=bind master_image

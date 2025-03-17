@@ -177,8 +177,13 @@ def final_anal(all_data, samples):
     # draw the legend
     ax.legend( frameon=False ) # no box around the legend
 
-    # plt.savefig("/output/figure.png")
-
+    output_path = "/output_container/figure.png"
+    print(f"Saving figure to: {output_path}")
+    plt.savefig(output_path)
+    
+    # cwd = os.getcwd()
+    # print(cwd)
+    # print("cwd^^")
 
     # Signal stacked height
     signal_tot = signal_heights[0] + mc_x_tot
@@ -367,6 +372,7 @@ for sample in samples:
         fileString = f"{path}{prefix}{value}.4lep.root" 
 
 
+        print(f"{sample} {value} being published")
         
 
         # Open file
@@ -395,7 +401,6 @@ for sample in samples:
             
             publish(inputs_dict, sample, "master_to_worker", "MASTER")
     
-    print(f"{sample} done publishing")
 
 
 # start listening
