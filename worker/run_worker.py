@@ -174,7 +174,7 @@ def worker_work(ch, method, properties, inputs):
         local_sample_data.append(data)
 
 
-    outputs_dict = {"sample":sample, "data":local_sample_data, "entry_stop":entry_stop}
+    outputs_dict = {"sample":sample, "data":local_sample_data, "entry_stop":entry_stop, "entry_start":entry_start, "value":value}
     # outputs = pkl.dumps(outputs_dict)
     
     publish(outputs_dict, sample, "worker_to_master", "WORKER")
