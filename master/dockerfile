@@ -2,7 +2,6 @@
 FROM python:latest
 
 # install dependent libraries
-# RUN pip install gzip
 RUN pip install pika
 RUN pip install uproot
 RUN pip install numpy
@@ -10,6 +9,7 @@ RUN pip install matplotlib
 RUN pip install awkward
 RUN pip install requests
 RUN pip install aiohttp
+RUN pip install docker
 
 # add our python program
 ADD infofile.py ./
