@@ -207,9 +207,15 @@ GeV = 1.0
 path = "https://atlas-opendata.web.cern.ch/atlas-opendata/samples/2020/4lep/" 
 
 
-### order changed, so longest/biggest datasets are calculated first
-# allows smaller sets to fill in once workers free up
+### order changed, so short sample calculate first to ensure all workers are activated
+### the longest/biggest datasets are calculated next
+### allows smaller sets to fill in once workers free up
 samples = {
+    r'Background $Z,t\bar{t}$' : { # Z + ttbar
+        'list' : ['Zee','Zmumu','ttbar_lep'],
+        'color' : "#6b59d3" # purple
+    },
+    
     r'Background $ZZ^*$' : { # ZZ
         'list' : ['llll'],
         'color' : "#ff0000" # red
@@ -218,11 +224,6 @@ samples = {
     r'Signal ($m_H$ = 125 GeV)' : { # H -> ZZ -> llll
         'list' : ['ggH125_ZZ4lep','VBFH125_ZZ4lep','WH125_ZZ4lep','ZH125_ZZ4lep'],
         'color' : "#00cdff" # light blue
-    },
-    
-    r'Background $Z,t\bar{t}$' : { # Z + ttbar
-        'list' : ['Zee','Zmumu','ttbar_lep'],
-        'color' : "#6b59d3" # purple
     },
     
     'data': {
@@ -258,7 +259,7 @@ run_time_speed = 1
 # Dictionary to hold awkward arrays
 all_data = {} 
 counter = 0
-    
+worker_logs = []
 
 def receive_data(ch, method, properties, outputs):
     global counter
@@ -274,6 +275,8 @@ def receive_data(ch, method, properties, outputs):
     data = outputs_dict["data"]
     entry_stop = outputs_dict["entry_stop"]
     entry_start = outputs_dict["entry_start"]
+    worker_log = outputs_dict["worker_log"]
+    worker_logs.append(worker_log)
     
     print(f"received {sample} {value} data, chunk: {entry_start} to {entry_stop}")
     
@@ -360,9 +363,6 @@ for i,sample in enumerate(samples):
         fileString = f"{path}{prefix}{value}.4lep.root" 
 
 
-        print(f"{sample} {value} being published")
-        
-
         # Open file
         tree = uproot.open(f"{fileString}:mini")
         
@@ -384,6 +384,8 @@ for i,sample in enumerate(samples):
             chunk_size=min_chunk_size
 
         # print("chunk size: ", chunk_size)
+
+        print(f"{sample} {value} being published")
 
         # split into chunks depending on numbers of workers, so each worker gets rouhgly same amount of data to analyse
         # chunk_size+1 ensures there is not more chunks than workers. 
@@ -409,13 +411,45 @@ channel.start_consuming()
     
 
 
+fig,ax = plt.subplots(1,2, figsize=(16,6))
+
+value_names = []
+
+for i in range(num_workers):
+    iter = (-1)*(i+1)
+    log = worker_logs[iter]
+    # print(log)
+    bottom_len = 0
+    bottom_time = 0
+    for sample in samples:
+        for value in samples[sample]['list']:
+            value = f"{value}"
+            if value in log.keys():
+                if value not in value_names:
+                    value_names.append(value)
+                    
+                colour = value_names.index(value)
+                
+                height_len = log[value]['len']
+                height_time = log[value]['time']
+                print(f"{bottom_len} to {height_len+bottom_len}")
+                ax[0].bar(i, height_len, bottom=bottom_len, label=value, color=f"C{colour}")
+                ax[1].bar(i, height_time, bottom=bottom_time, label=value, color=f"C{colour}")
+                bottom_len += height_len
+                bottom_time += height_time
+            # else:
+                # print(f"{value} not in log")
+        
+ax[0].set_xlabel("Worker")
+ax[0].set_ylabel("Quantity of input data")
+ax[1].set_xlabel("Worker")
+ax[1].set_ylabel("Time to process input data / s")
+# ax[1].set_yscale("log")
+# ax[0].legend(labels=value_names)
+# ax[1].legend(labels=value_names)
+plt.savefig("/output_container/workerfig.png")
 
 
-
-# plot bars in stack manner
-# plt.bar(x, y1, color='r')
-# plt.bar(x, y2, bottom=y1, color='b')
-# plt.show()
 
 
 print("\nfinal analysis")

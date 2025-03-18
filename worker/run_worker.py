@@ -24,17 +24,10 @@ channel.queue_declare(queue='worker_to_master')
 
 
 
-import uproot # for reading .root files
-import awkward as ak # to represent nested data in columnar format
 import vector # for 4-momentum calculations
-import time
 import infofile 
-import json
-import numpy as np
-import matplotlib.pyplot as plt 
-from matplotlib.ticker import AutoMinorLocator 
 import pickle as pkl
-# import numba as nb
+import time
 
 MeV = 0.001
 GeV = 1.0
@@ -42,7 +35,7 @@ GeV = 1.0
 lumi=10
 
 
-def publish(dict, sample, routing_key, container):
+def publish(dict, routing_key):
     
     outputs = pkl.dumps(dict)
     
@@ -56,7 +49,6 @@ def publish(dict, sample, routing_key, container):
 #%% FUNCTIONS
 
 # check lepton type of 4 leptons to check they come in pairs
-# @nb.njit()
 def check_lepton_type(lepton_type):
     """
     Check there are pairs of the same lepton type 
@@ -129,11 +121,13 @@ def calc_weight(relevant_weights, sample, events):
 
 #%%
 
+worker_log = {}
 tot_data_analysed = 0
 
 def worker_work(ch, method, properties, inputs):
     global tot_data_analysed
-    # inputs_dict = json.loads(inputs.decode('utf-8'))
+    global worker_log
+    
     inputs_dict = pkl.loads(inputs)
     
     tree = inputs_dict["tree"]
@@ -144,6 +138,8 @@ def worker_work(ch, method, properties, inputs):
     sample = inputs_dict["sample"]
     value = inputs_dict["value"]
 
+
+    start = time.time()
 
     # Print which sample is being processed
     print(f'WORKER received {sample} {value}, chunk {entry_start} to {entry_stop}') 
@@ -176,16 +172,25 @@ def worker_work(ch, method, properties, inputs):
             nOut = sum(data['totalWeight']) # sum of weights passing cuts in this batch 
         else:
             nOut = len(data)
-        # elapsed = time.time() - start # time taken to process
+         # time taken to process
         # print("\t\t nIn: "+str(nIn)+",\t nOut: \t"+str(nOut)+"\t in "+str(round(elapsed,1))+"s") # events before and after
 
         local_sample_data.append(data)
-
-
-    outputs_dict = {"sample":sample, "data":local_sample_data, "entry_stop":entry_stop, "entry_start":entry_start, "value":value}
-    # outputs = pkl.dumps(outputs_dict)
+        
+    elapsed = time.time() - start
+    print(f"WORKER analysed {value}, chunk {entry_start} to {entry_stop}\n\t\t\t\t in {elapsed} seconds")
     
-    publish(outputs_dict, sample, "worker_to_master", "WORKER")
+    if value in worker_log.keys():
+        worker_log[value]['len'] += nIn
+        worker_log[value]['time'] += elapsed
+    else:
+        worker_log[value] = {}
+        worker_log[value]['len'] = nIn
+        worker_log[value]['time'] = elapsed
+
+    outputs_dict = {"sample":sample, "data":local_sample_data, "entry_stop":entry_stop, "entry_start":entry_start, "value":value, "worker_log":worker_log}
+    
+    publish(outputs_dict, "worker_to_master")
 
     
 
