@@ -16,6 +16,8 @@ params = pika.ConnectionParameters(
 connection = pika.BlockingConnection(params)
 channel = connection.channel()
 
+channel.basic_qos(prefetch_count=1)
+
 # create the queue, if it doesn't already exist
 channel.queue_declare(queue='master_to_worker')
 channel.queue_declare(queue='worker_to_master')
@@ -28,6 +30,10 @@ import vector # for 4-momentum calculations
 import infofile 
 import pickle as pkl
 import time
+import socket 
+
+worker_id = socket.gethostname()
+print(f"SOCKET NAME: {worker_id}")
 
 MeV = 0.001
 GeV = 1.0
@@ -43,6 +49,7 @@ def publish(dict, routing_key):
 
     channel.basic_publish(exchange='',
                         routing_key=routing_key,
+                        properties=pika.BasicProperties( app_id=worker_id ),
                         body=outputs)
     # print(f"{container} published {sample}")
 
@@ -140,7 +147,8 @@ def worker_work(ch, method, properties, inputs):
 
 
     start = time.time()
-
+    # time.sleep(1)
+    
     # Print which sample is being processed
     print(f'WORKER received {sample} {value}, chunk {entry_start} to {entry_stop}') 
  
@@ -154,7 +162,7 @@ def worker_work(ch, method, properties, inputs):
         # Number of events in this batch
         nIn = len(data) 
         tot_data_analysed += nIn
-        print(f"WORKER total amount of data analysed by this worker: {tot_data_analysed}")
+        # print(f"WORKER total amount of data analysed by this worker: {tot_data_analysed}")
         
         
         # Cuts
@@ -177,7 +185,7 @@ def worker_work(ch, method, properties, inputs):
 
         local_sample_data.append(data)
         
-    elapsed = time.time() - start
+    elapsed = time.time() - start + 0.1
     print(f"WORKER analysed {value}, chunk {entry_start} to {entry_stop}\n\t\t\t\t in {elapsed} seconds")
     
     if value in worker_log.keys():

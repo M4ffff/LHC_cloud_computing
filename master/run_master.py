@@ -171,7 +171,11 @@ def final_anal(all_data, samples):
     print(f"\nResults:\n{N_sig = :.3f}\n{N_bg = :.3f}\n{signal_significance = :.3f}")
     
 
+publish_counter = 0
+
 def publish(dict, routing_key):
+    global publish_counter
+    publish_counter += 1
     outputs = pkl.dumps(dict)
     channel.basic_publish(exchange='',
                         routing_key=routing_key,
@@ -211,19 +215,19 @@ path = "https://atlas-opendata.web.cern.ch/atlas-opendata/samples/2020/4lep/"
 ### the longest/biggest datasets are calculated next
 ### allows smaller sets to fill in once workers free up
 samples = {
-    r'Background $Z,t\bar{t}$' : { # Z + ttbar
-        'list' : ['Zee','Zmumu','ttbar_lep'],
-        'color' : "#6b59d3" # purple
-    },
-    
     r'Background $ZZ^*$' : { # ZZ
         'list' : ['llll'],
         'color' : "#ff0000" # red
     },
     
     r'Signal ($m_H$ = 125 GeV)' : { # H -> ZZ -> llll
-        'list' : ['ggH125_ZZ4lep','VBFH125_ZZ4lep','WH125_ZZ4lep','ZH125_ZZ4lep'],
+        'list' : ['VBFH125_ZZ4lep','ggH125_ZZ4lep','WH125_ZZ4lep','ZH125_ZZ4lep'],
         'color' : "#00cdff" # light blue
+    },
+    
+    r'Background $Z,t\bar{t}$' : { # Z + ttbar
+        'list' : ['Zee','Zmumu','ttbar_lep'],
+        'color' : "#6b59d3" # purple
     },
     
     'data': {
@@ -242,12 +246,6 @@ relevant_weights = ["mcWeight", "scaleFactor_PILEUP", "scaleFactor_ELE", "scaleF
 
 #%%
 
-# luminosity = 0.5 # fb-1 # data_A only
-# luminosity = 1.9 # fb-1 # data_B only
-# luminosity = 2.9 # fb-1 # data_C only
-# luminosity = 4.7 # fb-1 # data_D only
-# luminosity = 10 # fb-1 # data_A,data_B,data_C,data_D
-
 # Set luminosity to 10 fb-1 for all data
 luminosity = 10
 
@@ -259,15 +257,20 @@ run_time_speed = 1
 # Dictionary to hold awkward arrays
 all_data = {} 
 counter = 0
-worker_logs = []
-
+worker_logs = {}
+worker_ids = []
+ 
 def receive_data(ch, method, properties, outputs):
     global counter
+    global publish_counter
     global timings
     global start
+    counter += 1
+    
+    worker_id = properties.app_id
+    
     # print("MASTER receiving some kind of data")
     outputs_dict = pkl.loads(outputs)
-    # print(outputs_dict.keys())
     
     sample = outputs_dict["sample"]
     value = outputs_dict["value"]
@@ -276,7 +279,11 @@ def receive_data(ch, method, properties, outputs):
     entry_stop = outputs_dict["entry_stop"]
     entry_start = outputs_dict["entry_start"]
     worker_log = outputs_dict["worker_log"]
-    worker_logs.append(worker_log)
+    
+    if worker_id not in worker_ids:
+        worker_ids.append(worker_id)
+    
+    worker_logs[worker_id] = worker_log
     
     print(f"received {sample} {value} data, chunk: {entry_start} to {entry_stop}")
     
@@ -287,23 +294,15 @@ def receive_data(ch, method, properties, outputs):
         all_data[sample] = ( updated_version )
         
     else:
-        # print("all_data[sample] doesn't exist")
         all_data[sample] = (data[0]) 
-        # print("length of all_data: ", len(all_data))
-        
-    #### hmmm
-    # print("consuming cancelled?")
-    # print("length of all_data: ", len(all_data))
-    
-    if entry_stop == all_num_entries[sample]:
-        print("COUNTER INCREASING")
-        counter += 1
-        if counter >= 4:
-            ch.stop_consuming()
-            print("STOPPED CONSUMING")  
-            end = time.time()  
-            elapsed = end - start
-            print(f"{sample} timing: {elapsed:.2f} s")
+            
+    print(f"received {counter} of {publish_counter} messages ")
+    if counter >= publish_counter:
+        ch.stop_consuming()
+        print("STOPPED CONSUMING")  
+        end = time.time()  
+        elapsed = end - start
+        print(f"{sample} timing: {elapsed:.2f} s")
     
 
 # one second wait to ensure containers have activated
@@ -330,7 +329,7 @@ channel.basic_consume(queue='worker_to_master',
                     on_message_callback=receive_data)
 
 
-print("MASTER consuming")
+
 
 # channel.start_consuming()
     
@@ -341,11 +340,10 @@ start = time.time()
 
 for i,sample in enumerate(samples): 
     # Print which sample is being processed
-    print(f'{sample}') 
+    # print(f'\n{sample}') 
     
     # update number of workers in case any activated after initial count. 
     num_workers = channel.queue_declare(queue='master_to_worker', passive=True).method.consumer_count
-    print("UPDATED NUMBER OF WORKERS: ", num_workers) 
 
     # Define empty list to hold data
     frames = [] 
@@ -376,6 +374,7 @@ for i,sample in enumerate(samples):
         sample_data = []
 
         # calculate amount of data to send to each worker
+        # +1 ensures chunk_size*num_workers > num_entries
         chunk_size = round(num_entries / (num_workers))+1
         
         # ensures tiny bits of data aren't sent to multiple workers - send data of at least size min_chunk_size to each worker.  
@@ -385,7 +384,7 @@ for i,sample in enumerate(samples):
 
         # print("chunk size: ", chunk_size)
 
-        print(f"{sample} {value} being published")
+        print(f"\n{sample} {value} being published")
 
         # split into chunks depending on numbers of workers, so each worker gets rouhgly same amount of data to analyse
         # chunk_size+1 ensures there is not more chunks than workers. 
@@ -403,8 +402,11 @@ for i,sample in enumerate(samples):
                                 "entry_start":entry_start, "entry_stop":entry_stop, "value":value, "sample":sample}
             
             publish(inputs_dict, "master_to_worker")
-    
+            
+        # channel.basic_get(queue='worker_to_master')
 
+
+print("MASTER consuming")
 
 # start listening
 channel.start_consuming()
@@ -416,8 +418,10 @@ fig,ax = plt.subplots(1,2, figsize=(16,6))
 value_names = []
 
 for i in range(num_workers):
-    iter = (-1)*(i+1)
-    log = worker_logs[iter]
+    
+    current_worker = worker_ids[i]
+    
+    log = worker_logs[current_worker]
     # print(log)
     bottom_len = 0
     bottom_time = 0
@@ -432,13 +436,11 @@ for i in range(num_workers):
                 
                 height_len = log[value]['len']
                 height_time = log[value]['time']
-                print(f"{bottom_len} to {height_len+bottom_len}")
+                # print(f"{bottom_len} to {height_len+bottom_len}")
                 ax[0].bar(i, height_len, bottom=bottom_len, label=value, color=f"C{colour}")
                 ax[1].bar(i, height_time, bottom=bottom_time, label=value, color=f"C{colour}")
                 bottom_len += height_len
                 bottom_time += height_time
-            # else:
-                # print(f"{value} not in log")
         
 ax[0].set_xlabel("Worker")
 ax[0].set_ylabel("Quantity of input data")
