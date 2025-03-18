@@ -148,6 +148,7 @@ def final_anal(all_data, samples):
     plt.savefig(output_path)
 
 
+    
     # Signal stacked height
     signal_tot = signal_heights[0] + mc_tot
 
@@ -214,16 +215,16 @@ samples = {
         'color' : "#ff0000" # red
     },
     
+    r'Signal ($m_H$ = 125 GeV)' : { # H -> ZZ -> llll
+        'list' : ['ggH125_ZZ4lep','VBFH125_ZZ4lep','WH125_ZZ4lep','ZH125_ZZ4lep'],
+        'color' : "#00cdff" # light blue
+    },
+    
     r'Background $Z,t\bar{t}$' : { # Z + ttbar
         'list' : ['Zee','Zmumu','ttbar_lep'],
         'color' : "#6b59d3" # purple
     },
     
-    r'Signal ($m_H$ = 125 GeV)' : { # H -> ZZ -> llll
-        'list' : ['ggH125_ZZ4lep','VBFH125_ZZ4lep','WH125_ZZ4lep','ZH125_ZZ4lep'],
-        'color' : "#00cdff" # light blue
-    },
-
     'data': {
         'list' : ['data_A','data_B','data_C','data_D'], 
     },
@@ -306,9 +307,12 @@ def receive_data(ch, method, properties, outputs):
 time.sleep(1)
 print("pause done")
 
+
+start3 = time.time()
 # Determine number of available workers
-queue_info = channel.queue_declare(queue='master_to_worker', passive=True)
-num_workers = queue_info.method.consumer_count
+num_workers = channel.queue_declare(queue='master_to_worker', passive=True).method.consumer_count
+end3 = time.time()
+print(f"time to check number of workers: {end3 - start3:.5f} seconds")
 
 # num_workers = 3
 print("FETCHED NUMBER OF WORKERS: ", num_workers) 
@@ -335,6 +339,10 @@ start = time.time()
 for i,sample in enumerate(samples): 
     # Print which sample is being processed
     print(f'{sample}') 
+    
+    # update number of workers in case any activated after initial count. 
+    num_workers = channel.queue_declare(queue='master_to_worker', passive=True).method.consumer_count
+    print("UPDATED NUMBER OF WORKERS: ", num_workers) 
 
     # Define empty list to hold data
     frames = [] 
@@ -360,7 +368,7 @@ for i,sample in enumerate(samples):
         
         # calculate number of entries in this sample value
         num_entries = tree.num_entries*run_time_speed
-        print(f"{sample} {value}"  )
+        # print(f"{sample} {value}"  )
         
         # add to dictionary
         all_num_entries[sample] = num_entries
@@ -368,18 +376,18 @@ for i,sample in enumerate(samples):
         sample_data = []
 
         # calculate amount of data to send to each worker
-        chunk_size = round(num_entries / (num_workers))
+        chunk_size = round(num_entries / (num_workers))+1
         
         # ensures tiny bits of data aren't sent to multiple workers - send data of at least size min_chunk_size to each worker.  
         min_chunk_size = 10000
         if chunk_size < min_chunk_size:
             chunk_size=min_chunk_size
 
-        print("chunk size: ", chunk_size)
+        # print("chunk size: ", chunk_size)
 
         # split into chunks depending on numbers of workers, so each worker gets rouhgly same amount of data to analyse
         # chunk_size+1 ensures there is not more chunks than workers. 
-        data_chunks = np.arange(0, num_entries, chunk_size+1)
+        data_chunks = np.arange(0, num_entries, chunk_size)
         print(f"\t number entries: {num_entries}     chunk size: {chunk_size}  ")
         print(f"\t data chunks: {data_chunks} \n")
         
@@ -399,6 +407,15 @@ for i,sample in enumerate(samples):
 # start listening
 channel.start_consuming()
     
+
+
+
+
+
+# plot bars in stack manner
+# plt.bar(x, y1, color='r')
+# plt.bar(x, y2, bottom=y1, color='b')
+# plt.show()
 
 
 print("\nfinal analysis")

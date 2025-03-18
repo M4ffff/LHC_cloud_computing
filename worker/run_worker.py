@@ -129,7 +129,10 @@ def calc_weight(relevant_weights, sample, events):
 
 #%%
 
+tot_data_analysed = 0
+
 def worker_work(ch, method, properties, inputs):
+    global tot_data_analysed
     # inputs_dict = json.loads(inputs.decode('utf-8'))
     inputs_dict = pkl.loads(inputs)
     
@@ -154,7 +157,10 @@ def worker_work(ch, method, properties, inputs):
         
         # Number of events in this batch
         nIn = len(data) 
-
+        tot_data_analysed += nIn
+        print(f"WORKER total amount of data analysed by this worker: {tot_data_analysed}")
+        
+        
         # Cuts
         lepton_type = data['lep_type']
         data = data[~check_lepton_type(lepton_type)]
@@ -195,6 +201,8 @@ channel.basic_consume(queue='master_to_worker',
 
 # log message to show we've started
 print('Waiting for messages. To exit press CTRL+C')
+
+
 
 # start listening
 channel.start_consuming()
