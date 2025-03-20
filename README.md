@@ -19,5 +19,5 @@ need to make sure the params is set correctly depending on if its docker compose
 <!-- stop running once master container finishes -->
 docker compose up --scale consumer=3 --abort-on-container-exit
 
-runs in detached mode - doesnt clog up terminal:
+<!-- runs in detached mode - doesnt clog up terminal: -->
 docker compose up -d --scale consumer=3

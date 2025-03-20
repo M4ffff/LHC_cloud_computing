@@ -1,41 +1,37 @@
 #!/usr/bin/env python
 import pika
-
-print("connection starting")
- 
-# when RabbitMQ is running on localhost
-# params = pika.ConnectionParameters('localhost')
-
-# when RabbitMQ broker is running on network
-# params = pika.ConnectionParameters('rabbitmq')
-
-
-# when starting services with docker compose
-params = pika.ConnectionParameters(
-    'rabbitmq',
-    heartbeat=0)
-
-print("connection started")
-
 import numpy as np 
 import matplotlib.pyplot as plt 
 from matplotlib.ticker import AutoMinorLocator 
 import awkward as ak 
-import json
 import pickle as pkl
-import os 
 import infofile
 import time
 import uproot
-import docker
 
+
+print("connection starting")
+
+# when starting services with docker compose
+params = pika.ConnectionParameters('rabbitmq', heartbeat=0)
+
+print("connection started")
+
+# set units and luminosity
 MeV = 0.001
 GeV = 1.0
 
-lumi=10
+luminosity=10
 
 
 def final_anal(all_data, samples):
+    """
+    analyse final data and produce final plots
+
+    Args:
+        all_data (dict): contains all data to be analysed
+        samples (dict): names of all samples and subsamples
+    """
     # x-axis range of the plot
     xmin = 80 * GeV
     xmax = 250 * GeV
@@ -46,18 +42,6 @@ def final_anal(all_data, samples):
     bin_edges = np.arange(xmin, xmax+step_size, step_size ) 
     bin_centres = np.arange(xmin+step_size/2, xmax+step_size/2, step_size ) 
 
-    fig, ax = plt.subplots(figsize=(15,5)) 
-
-    data = np.histogram(ak.to_numpy(all_data['data']['mass']), bin_edges )[0] 
-    data_errors = np.sqrt( data ) 
-
-    # signal
-    signal = ak.to_numpy(all_data[r'Signal ($m_H$ = 125 GeV)']['mass'])
-    # weights of each signal events
-    signal_weights = ak.to_numpy(all_data[r'Signal ($m_H$ = 125 GeV)'].totalWeight)
-    # colour of signal bar
-    signal_color = samples[r'Signal ($m_H$ = 125 GeV)']['color']
-
     # monte carlo entries
     mc = [] 
     # weights of each entry
@@ -66,7 +50,6 @@ def final_anal(all_data, samples):
     mc_colours = [] 
     mc_labels = [] 
 
-    #### potentially send too?
     # loop over background samples
     for sample in [r'Background $Z,t\bar{t}$', r'Background $ZZ^*$']: 
         mc.append( ak.to_numpy(all_data[sample]['mass']) ) 
@@ -74,27 +57,37 @@ def final_anal(all_data, samples):
         mc_colours.append( samples[sample]['color'] ) 
         mc_labels.append( sample ) 
 
+
     print("start plotting")
 
-    #%% Plot data points
+    fig, ax = plt.subplots(figsize=(15,5)) 
 
-    # plot the data points
+    # plot data
+    data = np.histogram(ak.to_numpy(all_data['data']['mass']), bin_edges )[0] 
+    data_errors = np.sqrt( data ) 
     ax.errorbar(x=bin_centres, y=data, yerr=data_errors, fmt='ko', label='Data') 
 
-    # plot the Monte Carlo bars
+
+    
+    # plot the background data
     mc_heights = ax.hist(mc, bins=bin_edges, weights=mc_weights, stacked=True, 
                                 color=mc_colours, label=mc_labels )
-
-    # stacked background MC y-axis value
+    
+    # total height of background data samples combined
     mc_tot = mc_heights[0][-1]
 
-
+    # plot signal
+    signal = ak.to_numpy(all_data[r'Signal ($m_H$ = 125 GeV)']['mass'])
+    # weights of each signal events
+    signal_weights = ak.to_numpy(all_data[r'Signal ($m_H$ = 125 GeV)'].totalWeight)
+    # colour of signal bar
+    signal_color = samples[r'Signal ($m_H$ = 125 GeV)']['color']
     # plot signal bars
     signal_heights = ax.hist(signal, bins=bin_edges, bottom=mc_tot, 
                     weights=signal_weights, color=signal_color,
                     label=r'Signal ($m_H$ = 125 GeV)')
     
-    # calculate MC statistical uncertainty
+    # calculate uncertainty in background data
     mc_err = np.sqrt(np.histogram(np.hstack(mc), bins=bin_edges, weights=np.hstack(mc_weights)**2)[0])
 
     # plot statistical uncertainty
@@ -102,54 +95,41 @@ def final_anal(all_data, samples):
                     hatch="////", width=step_size, label='Stat. Unc.' )
 
 
+    # SET AXES SETTINS AS IN HZZAnalysis notebook
+    
     # set the limits of the axes
     ax.set_xlim( left=xmin, right=xmax ) 
     ax.set_ylim( bottom=0, top=np.amax(data)*1.6 )
     
-
     # set axes ticks
     ax.xaxis.set_minor_locator( AutoMinorLocator() ) 
     ax.yaxis.set_minor_locator( AutoMinorLocator() ) 
     
-    
     # set the axis tick parameters for the main axes
     ax.tick_params(which='both', direction='in', top=True, right=True ) # draw ticks on right axis
-
 
     # axis labels
     ax.set_xlabel(r'4-lepton invariant mass $\mathrm{m_{4l}}$ [GeV]',
                         fontsize=13, x=1, horizontalalignment='right' )
     ax.set_ylabel('Events / '+str(step_size)+' GeV',
                             y=1, horizontalalignment='right') 
-
-
+    
+    ax.legend( frameon=False ) 
+    
     # Add text 'ATLAS Open Data' on plot
     plt.text(0.05, 0.93, 'ATLAS Open Data', transform=ax.transAxes, fontsize=13 ) 
-
     # Add energy and luminosity
-    lumi_used = str(lumi*run_time_speed) # luminosity to write on the plot
-    plt.text(0.05, # x
-                0.82, # y
-                r'$\sqrt{s}$=13 TeV,$\int$L dt = '+lumi_used+ r' fb$^{-1}$', # text
-                transform=ax.transAxes ) # coordinate system used is that of main_axes
-
+    luminosity_used = str(luminosity*data_fraction) # luminosity to write on the plot
+    plt.text(0.05, 0.82, r'$\sqrt{s}$=13 TeV,$\int$L dt = '+luminosity_used+ r' fb$^{-1}$', transform=ax.transAxes ) 
     # Add a label for the analysis carried out
-    plt.text(0.05, # x
-                0.76, # y
-                r'$H \rightarrow ZZ^* \rightarrow 4\ell$', # text 
-                transform=ax.transAxes ) # coordinate system used is that of main_axes
-
-    # draw the legend
-    ax.legend( frameon=False ) # no box around the legend
+    plt.text(0.05, 0.76, r'$H \rightarrow ZZ^* \rightarrow 4\ell$', transform=ax.transAxes ) 
 
     # save figure to container
     output_path = "/output_container/figure2.png"
     print(f"Saving figure to: {output_path}")
     plt.savefig(output_path)
 
-
-    
-    # Signal stacked height
+    # Signal height
     signal_tot = signal_heights[0] + mc_tot
 
     # find index of maximum signal
@@ -173,13 +153,22 @@ def final_anal(all_data, samples):
 
 publish_counter = 0
 
-def publish(dict, routing_key):
-    global publish_counter
+def publish(dict, routing_key, publish_counter):
+    """
+    Publish information from this container to another
+
+    Args:
+        dict (dict): dictionary containing information to be sent. 
+        routing_key (str): queue for message to be sent to
+        publish_counter (int): count of how many messages have been published
+    """
     publish_counter += 1
+    
     outputs = pkl.dumps(dict)
     channel.basic_publish(exchange='',
                         routing_key=routing_key,
                         body=outputs)
+    return publish_counter
 
 
 
@@ -211,8 +200,8 @@ GeV = 1.0
 path = "https://atlas-opendata.web.cern.ch/atlas-opendata/samples/2020/4lep/" 
 
 
-### order changed, so short sample calculate first to ensure all workers are activated
-### the longest/biggest datasets are calculated next
+
+### the longest/biggest datasets are calculated first
 ### allows smaller sets to fill in once workers free up
 samples = {
     r'Background $ZZ^*$' : { # ZZ
@@ -246,12 +235,10 @@ relevant_weights = ["mcWeight", "scaleFactor_PILEUP", "scaleFactor_ELE", "scaleF
 
 #%%
 
-# Set luminosity to 10 fb-1 for all data
-luminosity = 10
 
 # Controls the fraction of all events analysed
 # change lower to run quicker
-run_time_speed = 1
+data_fraction = 1
 
     
 # Dictionary to hold awkward arrays
@@ -264,15 +251,24 @@ worker_run_times = {}
 all_values = []
 
 def receive_data(ch, method, properties, outputs):
+    """
+    Function called when a message is received by a worker
+
+    Args:
+        ch (): channel over which message is sent  
+        method (): infomration about message delivery
+        properties (): defined properties
+        outputs (pkl): pickled dictionary of outputs of worker
+    """
+    # track how many messages have been received
     global counter
     global publish_counter
-    global timings
-    global start
     counter += 1
     
+    # determine which worker the message is from 
     worker_id = properties.app_id
     
-    # print("MASTER receiving some kind of data")
+    # get output data
     outputs_dict = pkl.loads(outputs)
     
     sample = outputs_dict["sample"]
@@ -284,47 +280,31 @@ def receive_data(ch, method, properties, outputs):
     worker_log = outputs_dict["worker_log"]
     start_time = outputs_dict["start"]
     
+    # track the values that come up in the order they're received
     if value not in all_values:
         all_values.append(value)
     
+    # track unique workers
     if worker_id not in worker_ids:
         worker_ids.append(worker_id)
     
+    # add log of specific information from this worker 
     worker_logs[worker_id] = worker_log
-    
     
     print(f"received {sample} {value} data, chunk: {entry_start} to {entry_stop}")
     
+    # add sample to all data
     if sample in all_data.keys():
-        # print("all_data[sample] exists:")
         current_sample = all_data[sample]
         updated_version = ak.concatenate( [current_sample, data[0]] )
         all_data[sample] = ( updated_version )
-        
     else:
         all_data[sample] = (data[0]) 
             
-     
+    # record total time taken to process this chunk of data
     end = time.time()
     elapsed = end - start_time
     print(f"{sample} {value} done in {elapsed} second ")
-    
-    # if this worker already has some entries, get these entries
-    if worker_id in worker_run_times.keys():
-        new_worker_run_time = worker_run_times[worker_id]
-    # else, make an empty dictionary to fill
-    else:
-        new_worker_run_time = {}
-    
-    # if this worker already has an entry for this specific vlaue, extend teh time for this value
-    if value in new_worker_run_time.keys():
-        new_worker_run_time[value] += elapsed
-    # else, set this vlaue to the elapsed time
-    else:
-        new_worker_run_time[value] = elapsed
-        
-    # add updated dictionary for this worker
-    worker_run_times[worker_id] = new_worker_run_time
     
     print(f"received {counter} of {publish_counter} messages ")
     if counter >= publish_counter:
@@ -338,9 +318,8 @@ def receive_data(ch, method, properties, outputs):
 time.sleep(1)
 print("pause done")
 
-
+# Determine number of available workers and how long it takes to check
 start3 = time.time()
-# Determine number of available workers
 num_workers = channel.queue_declare(queue='master_to_worker', passive=True).method.consumer_count
 end3 = time.time()
 print(f"time to check number of workers: {end3 - start3:.5f} seconds")
@@ -348,40 +327,23 @@ print(f"time to check number of workers: {end3 - start3:.5f} seconds")
 # num_workers = 3
 print("FETCHED NUMBER OF WORKERS: ", num_workers) 
 
-
-    
-# for sample in samples:
-# while len(all_data)
 # setup to listen for messages on queue 'master_to_worker'
 channel.basic_consume(queue='worker_to_master',
                     auto_ack=True,
                     on_message_callback=receive_data)
 
-
-
-
-# channel.start_consuming()
-    
-
+# initialise
 all_num_entries = {}
-timings = {}
-start = time.time() 
+# start = time.time() 
 
-for i,sample in enumerate(samples): 
-    # Print which sample is being processed
-    # print(f'\n{sample}') 
-    
+for i,sample in enumerate(samples):     
     # update number of workers in case any activated after initial count. 
     num_workers = channel.queue_declare(queue='master_to_worker', passive=True).method.consumer_count
 
     # Define empty list to hold data
     frames = [] 
 
-    # print(f"\t{sample}:") 
-    # start = time.time() 
-    # timings[sample] = start
-
-    # Loop over each file
+    # Loop over each subsample
     for value in samples[sample]['list']: 
         if sample == 'data': 
             prefix = "Data/" 
@@ -389,13 +351,11 @@ for i,sample in enumerate(samples):
             prefix = f"MC/mc_{str(infofile.infos[value]['DSID'])}."
         fileString = f"{path}{prefix}{value}.4lep.root" 
 
-
         # Open file
         tree = uproot.open(f"{fileString}:mini")
         
         # calculate number of entries in this sample value
-        num_entries = tree.num_entries*run_time_speed
-        # print(f"{sample} {value}"  )
+        num_entries = tree.num_entries*data_fraction
         
         # add to dictionary
         all_num_entries[sample] = num_entries
@@ -403,21 +363,20 @@ for i,sample in enumerate(samples):
         sample_data = []
 
         # calculate amount of data to send to each worker
-        # +1 ensures chunk_size*num_workers > num_entries
+        # +1 ensures chunk_size*num_workers >= num_entries
         chunk_size = round(num_entries / (num_workers))+1
         
         # ensures tiny bits of data aren't sent to multiple workers - send data of at least size min_chunk_size to each worker.  
+        # there may be a better choice than 10_000 but I'm not sure
         min_chunk_size = 10000
         if chunk_size < min_chunk_size:
             chunk_size=min_chunk_size
 
-        # print("chunk size: ", chunk_size)
 
-        print(f"\n{sample} {value} being published")
-
-        # split into chunks depending on numbers of workers, so each worker gets rouhgly same amount of data to analyse
+        # split into chunks depending on numbers of workers, so each worker gets roughly same amount of data to analyse
         # chunk_size+1 ensures there is not more chunks than workers. 
         data_chunks = np.arange(0, num_entries, chunk_size)
+        print(f"\n{sample} {value} being published")
         print(f"\t number entries: {num_entries}     chunk size: {chunk_size}  ")
         print(f"\t data chunks: {data_chunks} \n")
         
@@ -431,38 +390,31 @@ for i,sample in enumerate(samples):
             inputs_dict = {"tree":tree, "variables":variables, "relevant_weights":relevant_weights,
                                 "entry_start":entry_start, "entry_stop":entry_stop, "value":value, "sample":sample, "start":start_time}
             
-            publish(inputs_dict, "master_to_worker")
-            
-        # channel.basic_get(queue='worker_to_master')
-
+            # publish information and update publish_counter
+            publish_counter = publish(inputs_dict, "master_to_worker", publish_counter)
 
 print("MASTER consuming")
 
 # start listening
 channel.start_consuming()
-    
 
 
-fig,ax = plt.subplots(1,3, figsize=(16,6))
 
-# value_names = []
+# only plot as a graph if there are a small number of workers
+if num_workers < 5:
+    fig,ax = plt.subplots(1,2, figsize=(16,6))
 
-for i in range(num_workers):
-    
-    current_worker = worker_ids[i]
-    
-    log = worker_logs[current_worker]
-    # print(log.keys())
-    # print(list(log.keys())[1])
-    # print(log)
-    bottom_len = 0
-    bottom_time = 0
-    # for sample in samples:
-    for j, value in enumerate(log["value name list"]):
-            # if value not in value_names:
-            #     value_names.append(value)
-                
-            # colour = value_names.index(value)
+    # value_names = []
+
+    print(worker_ids)
+
+    for i, current_worker in enumerate(worker_ids):
+        
+        log = worker_logs[current_worker]
+        bottom_len = 0
+        bottom_time = 0
+        # for sample in samples:
+        for j, value in enumerate(log["value name list"]):
             colour = all_values.index(value)
             
             height_len = log['nin list'][j]
@@ -470,54 +422,16 @@ for i in range(num_workers):
             # print(f"{bottom_len} to {height_len+bottom_len}")
             ax[0].bar(i, height_len, bottom=bottom_len, color=f"C{colour}")
             ax[1].bar(i, height_time, bottom=bottom_time, color=f"C{colour}")
+            # update bottom of bar
             bottom_len += height_len
             bottom_time += height_time
-                
-          
-for i in range(num_workers):
-    
-    current_worker = worker_ids[i]
-    
-    log = worker_run_times[current_worker]
-    # print(log)
-    # bottom_len = 0
-    bottom_time = 0
-    # for sample in samples:
-    for value in log.keys():
-            # if value not in value_names:
-            # value_names.append(value)
-                
-            colour = all_values.index(value)
-            
-            # height_len = log[value]['len']
-            height_time = log[value]
-            # print(f"{bottom_len} to {height_len+bottom_len}")
-            # ax[0].bar(i, height_len, bottom=bottom_len, label=value, color=f"C{colour}")
-            ax[2].bar(i, height_time, bottom=bottom_time, color=f"C{colour}")
-            # bottom_len += height_len
-            bottom_time += height_time
-    
-    
-# print(all_values)
-# print(value_names)
-    
-    
-# value_index = np.arange(0,len(all_values) )
-# colour = value_names.index(value_index)
-# ax[2].scatter(value_index, np.ones(len(all_values)), label=all_values, c=f"C{colour}")
-        
-ax[0].set_xlabel("Worker")
-ax[0].set_ylabel("Quantity of input data")
-ax[1].set_xlabel("Worker")
-ax[1].set_ylabel("Time to process input data / s")
-ax[2].set_xlabel("Worker")
-ax[2].set_ylabel("Time to process input data / s")
-# ax[1].set_yscale("log")
-ax[0].legend(labels=all_values)
-# ax[1].legend(labels=value_names)
-plt.savefig("/output_container/workerfig.png")
+                    
+    ax[0].set_xlabel("Worker")
+    ax[0].set_ylabel("Quantity of input data")
+    ax[1].set_xlabel("Worker")
+    ax[1].set_ylabel("Time to process input data / s")
 
-
+    plt.savefig("/output_container/workerfig.png")
 
 
 print("\nfinal analysis")

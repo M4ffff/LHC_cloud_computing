@@ -1,57 +1,55 @@
 #!/usr/bin/env python
 import pika
- 
-# when RabbitMQ is running on localhost
-# params = pika.ConnectionParameters('localhost')
-
-# when RabbitMQ broker is running on network
-# params = pika.ConnectionParameters('rabbitmq')
-
-# when starting services with docker compose
-params = pika.ConnectionParameters(
-   'rabbitmq',
-   heartbeat=0)
-
-# create the connection to broker
-connection = pika.BlockingConnection(params)
-channel = connection.channel()
-
-channel.basic_qos(prefetch_count=1)
-
-# create the queue, if it doesn't already exist
-channel.queue_declare(queue='master_to_worker')
-channel.queue_declare(queue='worker_to_master')
-
-
-
-
-
-import vector # for 4-momentum calculations
+import vector 
 import infofile 
 import pickle as pkl
 import time
 import socket 
 
+
+
+# start service
+params = pika.ConnectionParameters('rabbitmq', heartbeat=0)
+
+# create connection to network
+connection = pika.BlockingConnection(params)
+channel = connection.channel()
+
+channel.basic_qos(prefetch_count=1)
+
+# create the queues to send daya to and from master
+channel.queue_declare(queue='master_to_worker')
+channel.queue_declare(queue='worker_to_master')
+
+
+# get id name of each worker
 worker_id = socket.gethostname()
 print(f"SOCKET NAME: {worker_id}")
 
+# set units and luminosity
 MeV = 0.001
 GeV = 1.0
 
-lumi=10
+luminosity=10
 
 
 def publish(dict, routing_key):
-    
-    outputs = pkl.dumps(dict)
-    
-    # print(f"{container} publishing {sample}")
+    """
+    Publish information from this container to another
 
+    Args:
+        dict (dict): dictionary containing information to be sent. 
+        routing_key (str): queue for message to be sent to
+    """
+    
+    # convert dictionary to pickle file
+    outputs = pkl.dumps(dict)
+
+    # send to master
     channel.basic_publish(exchange='',
                         routing_key=routing_key,
-                        properties=pika.BasicProperties( app_id=worker_id ),
+                        properties=pika.BasicProperties( app_id=worker_id ),  # send which worker this message is from 
                         body=outputs)
-    # print(f"{container} published {sample}")
 
 #%% FUNCTIONS
 
@@ -95,15 +93,14 @@ def calc_mass(lepton_pt, lepton_eta, lepton_phi, lepton_E):
     """
     Calculate invariant mass of state
     
-    ### need to do
     Args:
-        lepton_pt (_type_): _description_
-        lepton_eta (_type_): _description_
-        lepton_phi (_type_): _description_
-        lepton_E (_type_): _description_
+        lepton_pt (awk array): lepton transverse momentum
+        lepton_eta (awk array): angle of particle relative to beam
+        lepton_phi (awk array): angle of particles movement
+        lepton_E (awk array): lepton energies
 
     Returns:
-        _type_: _description_
+        float: invariant mass
     """
     # groups into four vectors
     p4 = vector.zip({"pt": lepton_pt, "eta": lepton_eta, "phi": lepton_phi, "E": lepton_E})
@@ -112,11 +109,24 @@ def calc_mass(lepton_pt, lepton_eta, lepton_phi, lepton_E):
     return invariant_mass
 
 
-### redo
 def calc_weight(relevant_weights, sample, events):
+    """
+    Caluclate weighting of events
+
+    Args:
+        relevant_weights (list): list of relevant weights
+        sample (str): name of subsample
+        events (awk arr): data descirbing events
+
+    Returns:
+        float: MC weighting
+    """
     info = infofile.infos[sample]
-    xsec_weight = (lumi*1000*info["xsec"])/(info["sumw"]*info["red_eff"]) #*1000 to go from fb-1 to pb-1
-    total_weight = xsec_weight 
+    # determine all weightings of MC evennts
+    mc_weights = (luminosity*1000*info["xsec"])/(info["sumw"]*info["red_eff"]) 
+    total_weight = mc_weights 
+    
+    # multiply events by their weightings
     for variable in relevant_weights:
         total_weight = total_weight * events[variable]
     return total_weight
@@ -129,15 +139,16 @@ def calc_weight(relevant_weights, sample, events):
 #%%
 
 worker_log = {}
-tot_data_analysed = 0
+# tot_data_analysed = 0
 elapsed_list = []
 value_name_list = []
 nin_list = []
 
 def worker_work(ch, method, properties, inputs):
-    global tot_data_analysed
-    global worker_log
+    # global tot_data_analysed
+    # global worker_log
     
+    # load inputs
     inputs_dict = pkl.loads(inputs)
     
     tree = inputs_dict["tree"]
@@ -149,7 +160,7 @@ def worker_work(ch, method, properties, inputs):
     value = inputs_dict["value"]
     start_time = inputs_dict["start"]
 
-
+    # start timing of analysis
     start = time.time()
     # time.sleep(1)
     
@@ -165,9 +176,8 @@ def worker_work(ch, method, properties, inputs):
         
         # Number of events in this batch
         nIn = len(data) 
-        tot_data_analysed += nIn
-        # print(f"WORKER total amount of data analysed by this worker: {tot_data_analysed}")
-        
+        # record how much data this worker has analysed
+        # tot_data_analysed += nIn
         
         # Cuts
         lepton_type = data['lep_type']
