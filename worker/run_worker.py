@@ -130,6 +130,9 @@ def calc_weight(relevant_weights, sample, events):
 
 worker_log = {}
 tot_data_analysed = 0
+elapsed_list = []
+value_name_list = []
+nin_list = []
 
 def worker_work(ch, method, properties, inputs):
     global tot_data_analysed
@@ -144,6 +147,7 @@ def worker_work(ch, method, properties, inputs):
     entry_stop = inputs_dict["entry_stop"]
     sample = inputs_dict["sample"]
     value = inputs_dict["value"]
+    start_time = inputs_dict["start"]
 
 
     start = time.time()
@@ -188,15 +192,23 @@ def worker_work(ch, method, properties, inputs):
     elapsed = time.time() - start + 0.1
     print(f"WORKER analysed {value}, chunk {entry_start} to {entry_stop}\n\t\t\t\t in {elapsed} seconds")
     
-    if value in worker_log.keys():
-        worker_log[value]['len'] += nIn
-        worker_log[value]['time'] += elapsed
-    else:
-        worker_log[value] = {}
-        worker_log[value]['len'] = nIn
-        worker_log[value]['time'] = elapsed
+    # if value in worker_log.keys():
+    #     worker_log[value]['len'] += nIn
+    #     worker_log[value]['time'] += elapsed
+    # else:
+    #     worker_log[value] = {}
+    #     worker_log[value]['len'] = nIn
+    #     worker_log[value]['time'] = elapsed
 
-    outputs_dict = {"sample":sample, "data":local_sample_data, "entry_stop":entry_stop, "entry_start":entry_start, "value":value, "worker_log":worker_log}
+    elapsed_list.append(elapsed)
+    value_name_list.append(value)
+    nin_list.append(nIn)
+    worker_log["elapsed list"] = elapsed_list
+    worker_log["value name list"] = value_name_list
+    worker_log["nin list"] = nin_list
+
+    outputs_dict = {"sample":sample, "data":local_sample_data, "entry_stop":entry_stop, "entry_start":entry_start,
+                    "value":value, "worker_log":worker_log, "start":start_time}
     
     publish(outputs_dict, "worker_to_master")
 

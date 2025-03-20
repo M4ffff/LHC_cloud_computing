@@ -259,7 +259,10 @@ all_data = {}
 counter = 0
 worker_logs = {}
 worker_ids = []
+worker_run_times = {}
  
+all_values = []
+
 def receive_data(ch, method, properties, outputs):
     global counter
     global publish_counter
@@ -279,11 +282,16 @@ def receive_data(ch, method, properties, outputs):
     entry_stop = outputs_dict["entry_stop"]
     entry_start = outputs_dict["entry_start"]
     worker_log = outputs_dict["worker_log"]
+    start_time = outputs_dict["start"]
+    
+    if value not in all_values:
+        all_values.append(value)
     
     if worker_id not in worker_ids:
         worker_ids.append(worker_id)
     
     worker_logs[worker_id] = worker_log
+    
     
     print(f"received {sample} {value} data, chunk: {entry_start} to {entry_stop}")
     
@@ -296,13 +304,34 @@ def receive_data(ch, method, properties, outputs):
     else:
         all_data[sample] = (data[0]) 
             
+     
+    end = time.time()
+    elapsed = end - start_time
+    print(f"{sample} {value} done in {elapsed} second ")
+    
+    # if this worker already has some entries, get these entries
+    if worker_id in worker_run_times.keys():
+        new_worker_run_time = worker_run_times[worker_id]
+    # else, make an empty dictionary to fill
+    else:
+        new_worker_run_time = {}
+    
+    # if this worker already has an entry for this specific vlaue, extend teh time for this value
+    if value in new_worker_run_time.keys():
+        new_worker_run_time[value] += elapsed
+    # else, set this vlaue to the elapsed time
+    else:
+        new_worker_run_time[value] = elapsed
+        
+    # add updated dictionary for this worker
+    worker_run_times[worker_id] = new_worker_run_time
+    
     print(f"received {counter} of {publish_counter} messages ")
     if counter >= publish_counter:
         ch.stop_consuming()
         print("STOPPED CONSUMING")  
-        end = time.time()  
-        elapsed = end - start
-        print(f"{sample} timing: {elapsed:.2f} s")
+        
+    print(f"{sample} timing: {elapsed:.2f} s")
     
 
 # one second wait to ensure containers have activated
@@ -398,8 +427,9 @@ for i,sample in enumerate(samples):
             entry_stop = min([entry_start + chunk_size, num_entries])
             
             # send info
+            start_time = time.time()
             inputs_dict = {"tree":tree, "variables":variables, "relevant_weights":relevant_weights,
-                                "entry_start":entry_start, "entry_stop":entry_stop, "value":value, "sample":sample}
+                                "entry_start":entry_start, "entry_stop":entry_stop, "value":value, "sample":sample, "start":start_time}
             
             publish(inputs_dict, "master_to_worker")
             
@@ -413,41 +443,77 @@ channel.start_consuming()
     
 
 
-fig,ax = plt.subplots(1,2, figsize=(16,6))
+fig,ax = plt.subplots(1,3, figsize=(16,6))
 
-value_names = []
+# value_names = []
 
 for i in range(num_workers):
     
     current_worker = worker_ids[i]
     
     log = worker_logs[current_worker]
+    # print(log.keys())
+    # print(list(log.keys())[1])
     # print(log)
     bottom_len = 0
     bottom_time = 0
-    for sample in samples:
-        for value in samples[sample]['list']:
-            value = f"{value}"
-            if value in log.keys():
-                if value not in value_names:
-                    value_names.append(value)
-                    
-                colour = value_names.index(value)
+    # for sample in samples:
+    for j, value in enumerate(log["value name list"]):
+            # if value not in value_names:
+            #     value_names.append(value)
                 
-                height_len = log[value]['len']
-                height_time = log[value]['time']
-                # print(f"{bottom_len} to {height_len+bottom_len}")
-                ax[0].bar(i, height_len, bottom=bottom_len, label=value, color=f"C{colour}")
-                ax[1].bar(i, height_time, bottom=bottom_time, label=value, color=f"C{colour}")
-                bottom_len += height_len
-                bottom_time += height_time
+            # colour = value_names.index(value)
+            colour = all_values.index(value)
+            
+            height_len = log['nin list'][j]
+            height_time = log['elapsed list'][j]
+            # print(f"{bottom_len} to {height_len+bottom_len}")
+            ax[0].bar(i, height_len, bottom=bottom_len, color=f"C{colour}")
+            ax[1].bar(i, height_time, bottom=bottom_time, color=f"C{colour}")
+            bottom_len += height_len
+            bottom_time += height_time
+                
+          
+for i in range(num_workers):
+    
+    current_worker = worker_ids[i]
+    
+    log = worker_run_times[current_worker]
+    # print(log)
+    # bottom_len = 0
+    bottom_time = 0
+    # for sample in samples:
+    for value in log.keys():
+            # if value not in value_names:
+            # value_names.append(value)
+                
+            colour = all_values.index(value)
+            
+            # height_len = log[value]['len']
+            height_time = log[value]
+            # print(f"{bottom_len} to {height_len+bottom_len}")
+            # ax[0].bar(i, height_len, bottom=bottom_len, label=value, color=f"C{colour}")
+            ax[2].bar(i, height_time, bottom=bottom_time, color=f"C{colour}")
+            # bottom_len += height_len
+            bottom_time += height_time
+    
+    
+# print(all_values)
+# print(value_names)
+    
+    
+# value_index = np.arange(0,len(all_values) )
+# colour = value_names.index(value_index)
+# ax[2].scatter(value_index, np.ones(len(all_values)), label=all_values, c=f"C{colour}")
         
 ax[0].set_xlabel("Worker")
 ax[0].set_ylabel("Quantity of input data")
 ax[1].set_xlabel("Worker")
 ax[1].set_ylabel("Time to process input data / s")
+ax[2].set_xlabel("Worker")
+ax[2].set_ylabel("Time to process input data / s")
 # ax[1].set_yscale("log")
-# ax[0].legend(labels=value_names)
+ax[0].legend(labels=all_values)
 # ax[1].legend(labels=value_names)
 plt.savefig("/output_container/workerfig.png")
 
