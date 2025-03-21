@@ -15,6 +15,7 @@ params = pika.ConnectionParameters('rabbitmq', heartbeat=0)
 connection = pika.BlockingConnection(params)
 channel = connection.channel()
 
+# Each worker can receive only one message at a time
 channel.basic_qos(prefetch_count=1)
 
 # create the queues to send daya to and from master
@@ -31,7 +32,6 @@ MeV = 0.001
 GeV = 1.0
 
 luminosity=10
-
 
 def publish(dict, routing_key):
     """

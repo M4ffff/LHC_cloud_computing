@@ -15,21 +15,22 @@ other_scaling_timings = {}
 run_time_speeds = np.arange(0.2,1.05,0.2)
 num_containers = np.arange(1,5)
 
+scaling_timings_list = []
+other_scaling_timings_list = []
+    
 for container in num_containers:
-    scaling_timings_list = []
-    other_scaling_timings_list = []
-    for run_time in run_time_speeds:
-        start = time.time()
-        ouput = subprocess.run(["docker", "compose", "up",  "--scale", f"consumer={container}", "--abort-on-container-exit"], text=True,  capture_output=True)
-        # print(ouput)
-        end = time.time()
-        elapsed = end-start
-        print(f"\nelapsed: {elapsed}\n")
-        other_elapsed = str(ouput).split("data timing:")
-        print(f"\n other elapsed: {other_elapsed[1][:7]}")
-        
-        scaling_timings_list.append( elapsed )
-        other_scaling_timings_list.append( float(other_elapsed[1][:7]) )
+
+    start = time.time()
+    output = subprocess.run(["docker", "compose", "up",  "--scale", f"consumer={container}", "--abort-on-container-exit"], text=True,  capture_output=True)
+    # print(output)
+    end = time.time()
+    elapsed = end-start
+    print(f"\nelapsed: {elapsed}\n")
+    other_elapsed = str(output).split("data timing:")
+    print(f"\n other elapsed: {other_elapsed[1][:7]}")
+    
+    scaling_timings_list.append( elapsed )
+    other_scaling_timings_list.append( float(other_elapsed[1][:7]) )
     
     scaling_timings[container] = scaling_timings_list
     other_scaling_timings[container] = other_scaling_timings_list

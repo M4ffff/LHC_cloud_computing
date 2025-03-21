@@ -10,18 +10,7 @@ import time
 import uproot
 
 
-print("connection starting")
 
-# when starting services with docker compose
-params = pika.ConnectionParameters('rabbitmq', heartbeat=0)
-
-print("connection started")
-
-# set units and luminosity
-MeV = 0.001
-GeV = 1.0
-
-luminosity=10
 
 
 def final_anal(all_data, samples):
@@ -151,8 +140,6 @@ def final_anal(all_data, samples):
     print(f"\nResults:\n{N_sig = :.3f}\n{N_bg = :.3f}\n{signal_significance = :.3f}")
     
 
-publish_counter = 0
-
 def publish(dict, routing_key, publish_counter):
     """
     Publish information from this container to another
@@ -173,6 +160,12 @@ def publish(dict, routing_key, publish_counter):
 
 
 ### RECEIVE DATA
+print("connection starting")
+
+# when starting services with docker compose
+params = pika.ConnectionParameters('rabbitmq', heartbeat=0)
+
+print("connection started")
 
 # create the connection to broker
 connection = pika.BlockingConnection(params)
@@ -184,22 +177,14 @@ channel.queue_declare(queue='master_to_worker')
 channel.queue_declare(queue='worker_to_master')
 
 
-
-
-
-
-
-
-#%% SETUP
-
-# units for conversion
+# set units and luminosity
 MeV = 0.001
 GeV = 1.0
 
+luminosity=10
+
 # path to data
 path = "https://atlas-opendata.web.cern.ch/atlas-opendata/samples/2020/4lep/" 
-
-
 
 ### the longest/biggest datasets are calculated first
 ### allows smaller sets to fill in once workers free up
@@ -224,17 +209,9 @@ samples = {
     },
 }
 
-
-#%%
-
 # Important variables used in analysis
 variables = ['lep_pt','lep_eta','lep_phi','lep_E','lep_charge','lep_type']
 relevant_weights = ["mcWeight", "scaleFactor_PILEUP", "scaleFactor_ELE", "scaleFactor_MUON", "scaleFactor_LepTRIGGER"]
-
-
-
-#%%
-
 
 # Controls the fraction of all events analysed
 # change lower to run quicker
@@ -244,10 +221,8 @@ data_fraction = 1
 # Dictionary to hold awkward arrays
 all_data = {} 
 counter = 0
+# logs of outputs from each worker
 worker_logs = {}
-worker_ids = []
-worker_run_times = {}
- 
 all_values = []
 
 def receive_data(ch, method, properties, outputs):
@@ -284,10 +259,6 @@ def receive_data(ch, method, properties, outputs):
     if value not in all_values:
         all_values.append(value)
     
-    # track unique workers
-    if worker_id not in worker_ids:
-        worker_ids.append(worker_id)
-    
     # add log of specific information from this worker 
     worker_logs[worker_id] = worker_log
     
@@ -319,10 +290,10 @@ time.sleep(1)
 print("pause done")
 
 # Determine number of available workers and how long it takes to check
-start3 = time.time()
+start = time.time()
 num_workers = channel.queue_declare(queue='master_to_worker', passive=True).method.consumer_count
-end3 = time.time()
-print(f"time to check number of workers: {end3 - start3:.5f} seconds")
+end = time.time()
+print(f"time to check number of workers: {end - start:.5f} seconds")
 
 # num_workers = 3
 print("FETCHED NUMBER OF WORKERS: ", num_workers) 
@@ -334,7 +305,9 @@ channel.basic_consume(queue='worker_to_master',
 
 # initialise
 all_num_entries = {}
-# start = time.time() 
+
+# track number of publishes done
+publish_counter = 0
 
 for i,sample in enumerate(samples):     
     # update number of workers in case any activated after initial count. 
@@ -367,10 +340,14 @@ for i,sample in enumerate(samples):
         chunk_size = round(num_entries / (num_workers))+1
         
         # ensures tiny bits of data aren't sent to multiple workers - send data of at least size min_chunk_size to each worker.  
-        # there may be a better choice than 10_000 but I'm not sure
+        # also ensures huge chunks of data aren't sent to each worker - send data of less than size max_chunk_size to each worker.  
+        # there may be better choices than 10_000 and 100_000_000 but it is hard to find out
         min_chunk_size = 10000
+        max_chunk_size = 100_000_000
         if chunk_size < min_chunk_size:
             chunk_size=min_chunk_size
+        elif chunk_size > max_chunk_size:
+            chunk_size=max_chunk_size
 
 
         # split into chunks depending on numbers of workers, so each worker gets roughly same amount of data to analyse
@@ -404,11 +381,7 @@ channel.start_consuming()
 if num_workers < 5:
     fig,ax = plt.subplots(1,2, figsize=(16,6))
 
-    # value_names = []
-
-    print(worker_ids)
-
-    for i, current_worker in enumerate(worker_ids):
+    for i, current_worker in enumerate(worker_logs.keys()):
         
         log = worker_logs[current_worker]
         bottom_len = 0
@@ -427,8 +400,12 @@ if num_workers < 5:
             bottom_time += height_time
                     
     ax[0].set_xlabel("Worker")
+    ax[0].set_xticks(np.arange(num_workers))
+    ax[0].set_xticklabels(worker_logs.keys())
     ax[0].set_ylabel("Quantity of input data")
     ax[1].set_xlabel("Worker")
+    ax[1].set_xticks(np.arange(num_workers))
+    ax[1].set_xticklabels(worker_logs.keys())
     ax[1].set_ylabel("Time to process input data / s")
 
     plt.savefig("/output_container/workerfig.png")

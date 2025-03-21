@@ -14,7 +14,7 @@ docker run --rm -it --network rabbit --name master_container --mount src="$(pwd)
 docker run --rm -it --network rabbit --name worker_container worker_image
 
 <!-- to run as docker compose -->
-need to make sure the params is set correctly depending on if its docker compose or network
+<!-- need to make sure the params is set correctly depending on if its docker compose or network -->
 <!-- number of workers set as 3 -->
 <!-- stop running once master container finishes -->
 docker compose up --scale consumer=3 --abort-on-container-exit
