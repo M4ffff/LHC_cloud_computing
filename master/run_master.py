@@ -162,6 +162,10 @@ def publish(dict, routing_key, publish_counter):
 ### RECEIVE DATA
 print("connection starting")
 
+
+# when running on network
+# params = pika.ConnectionParameters('rabbitmq')
+
 # when starting services with docker compose
 params = pika.ConnectionParameters('rabbitmq', heartbeat=0)
 

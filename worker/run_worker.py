@@ -7,6 +7,8 @@ import time
 import socket 
 
 
+# when running on network
+# params = pika.ConnectionParameters('rabbitmq')
 
 # start service
 params = pika.ConnectionParameters('rabbitmq', heartbeat=0)

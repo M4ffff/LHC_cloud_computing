@@ -11,7 +11,7 @@ docker image build -t master_image master/.
 docker image build -t worker_image worker/.
 ```
 
-to run on network:
+to run on network (not recommended):
 
 ```
 docker run --rm -d -p 15672:15672 -p 5672:5672 --network rabbit --name rabbitmq rabbitmq:3-management
@@ -19,11 +19,14 @@ docker run --rm -it --network rabbit --name master_container --mount src="$(pwd)
 docker run --rm -it --network rabbit --name worker_container worker_image
 ```
 
-to run as docker compose:
-(need to make sure the params is set correctly depending on if its docker compose or network)
-(number of workers set as 3)
-(stop running once master container finishes)
+(If running on network, need to make sure the params is set correctly by uncommenting the line indicated in the run_master and run_worker scripts) 
 
+to run as docker compose (recommended):
+ 
 ```
 docker compose up --scale consumer=3 --abort-on-container-exit
 ```
+
+(number of workers currently set as 3)  
+
+(stops running once a container finishes - should be when the master container finishes) 
