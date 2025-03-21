@@ -147,6 +147,7 @@ run_time_speed = 1
 # Dictionary to hold awkward arrays
 all_data = {} 
 
+all_nins = {}
 
 for sample in samples: 
     # Print which sample is being processed
@@ -154,6 +155,7 @@ for sample in samples:
 
     # Define empty list to hold data
     frames = [] 
+    nins = []
 
     # Loop over each file
     for value in samples[sample]['list']: 
@@ -178,6 +180,8 @@ for sample in samples:
              
             # Number of events in this batch
             nIn = len(data) 
+            
+            nins.append(nIn)
                                  
             # Record transverse momenta (see bonus activity for explanation)
             data['leading_lep_pt'] = data['lep_pt'][:,0]
@@ -205,18 +209,18 @@ for sample in samples:
 
             # Append data to the whole sample data list
             sample_data.append(data)
-        print(sample_data[0])
-        print(len(sample_data[0]))
-        # # print(ak.count(sample_data))
-        print((ak.concatenate(sample_data)))
-        # # print(ak.concatenate(ak.concatenate(sample_data), axis=1))
-        print(len(ak.concatenate(sample_data)))
+        # print(sample_data[0])
+        # print(len(sample_data[0]))
+        # # # print(ak.count(sample_data))
+        # print((ak.concatenate(sample_data)))
+        # # # print(ak.concatenate(ak.concatenate(sample_data), axis=1))
+        # print(len(ak.concatenate(sample_data)))
         frames.append(ak.concatenate(sample_data)) 
-    print(frames)
-    print(len(frames))
-    print(ak.concatenate(frames))
-    print(len(ak.concatenate(frames)))
-
+    # print(frames)
+    # print(len(frames))
+    # print(ak.concatenate(frames))
+    # print(len(ak.concatenate(frames)))
+    all_nins[sample] = nins
     # GATHER DATA FROM WORKERS BEFORE MERGING?
     all_data[sample] = ak.concatenate(frames) # dictionary entry is concatenated awkward arrays
 
@@ -224,7 +228,30 @@ for sample in samples:
 print(len(all_data))
 # print((all_data).shape)
 
+
+
 # PLOTTING
+
+fig,ax = plt.subplots(1,2, figsize=(16,6))
+
+for sample in samples:
+    bottom = 0
+    print(all_nins[sample])
+    for height in all_nins[sample]:
+        print(f"{bottom} to {height+bottom}")
+        # top = len(height)
+        ax[0].bar(sample, height, bottom=bottom)
+        ax[1].bar(sample, height, bottom=bottom)
+        bottom+=height
+
+
+ax[0].set_xlabel("Sample")
+ax[0].set_ylabel("Length of input data")
+ax[1].set_xlabel("Sample")
+ax[1].set_ylabel("Length of input data")
+ax[1].set_yscale("log")
+plt.show()
+
 
 #%%
 

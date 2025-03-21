@@ -15,8 +15,8 @@ RUN pip install requests
 RUN pip install aiohttp
  
 # add our python program
-ADD run_worker.py ./
 ADD infofile.py ./
+ADD run_worker.py ./
 
 # the command to run our program
 CMD [ "python", "-u", "./run_worker.py"]

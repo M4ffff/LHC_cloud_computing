@@ -32,5 +32,5 @@ services:
       rabbitmq:
         condition: service_healthy
     volumes:
-      - ./:/output_container
+      - ./output/:/output_container
     restart: no
