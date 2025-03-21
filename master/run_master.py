@@ -114,7 +114,7 @@ def final_anal(all_data, samples):
     plt.text(0.05, 0.76, r'$H \rightarrow ZZ^* \rightarrow 4\ell$', transform=ax.transAxes ) 
 
     # save figure to container
-    output_path = "/output_container/figure2.png"
+    output_path = "/output_container/HZZ_analysis_figure.png"
     print(f"Saving figure to: {output_path}")
     plt.savefig(output_path)
 
@@ -408,7 +408,7 @@ if num_workers < 5:
     ax[1].set_xticklabels(worker_logs.keys())
     ax[1].set_ylabel("Time to process input data / s")
 
-    plt.savefig("/output_container/workerfig.png")
+    plt.savefig("/output_container/worker_figure.png")
 
 
 print("\nfinal analysis")
